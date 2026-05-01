@@ -57,6 +57,9 @@ def domirank(G, sigma = -1, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep
     #     conv_iter = maxIter
     return Psi/np.max(Psi) #normalize to [0,1]
 
+
+# attack functions
+
 def remove_node(G, removedNode):
     '''
     removes the node from the graph by removing it from a networkx.Graph type, or zeroing the edges in array form.
@@ -68,7 +71,7 @@ def remove_node(G, removedNode):
             for node in removedNode:
                 G.remove_node(node) #remove node in graph form
         return G
-    elif type(G) == scipy.sparse._arrays.csr_array:
+    elif type(G) == scipy.sparse.csr_array:
         # .eye(m, n=none, k=0): Returns a sparse matrix (m x n) where the kth diagonal is all ones and everything else is zeros.
         diag = scipy.sparse.csr_array(scipy.sparse.eye(G.shape[0])) 
         diag[removedNode, removedNode] = 0 #set the rows and columns that are equal to zero in the sparse array
@@ -92,7 +95,7 @@ def get_component_size(G, strong = False):
         G = G.subgraph(GMask)
         return len(GMask)     
        
-    elif type(G) == scipy.sparse._arrays.csr_array:
+    elif type(G) == scipy.sparse.csr_array:
         if strong == False:
             connection_type = 'weak'
         else:
@@ -102,4 +105,76 @@ def get_component_size(G, strong = False):
     else:
         raise TypeError('You must input a networkx.Graph Data-Type or scipy.sparse.csr array')
 
+def get_largest_component(G, strong = False):
+    if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
+        if nx.is_directed(G) and strong == False:
+            GMask = max(nx.weakly_connected_components(G), key = len)
+        if nx.is_directed(G) and strong == True:
+            GMask = max(nx.strongly_connected_components(G), key = len)
+        else:
+            GMask = max(nx.connected_components(G), key = len)
+        G = G.subgraph(GMask)
+        return G     
+    else:
+        raise TypeError('You must input a networkx.Graph Data-Type')
 
+def get_link_size(G):
+    if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
+        links = G.number_of_edges() #convert to scipy sparse if it is a graph 
+    elif type(G) == scipy.sparse.csr_array:
+        links = G.sum() # caso no dirigido no sería/2?
+    else:
+        raise TypeError('You must input a networkx.Graph Data-Type')
+    return links
+
+def generate_attack(centrality, node_map = False):
+    '''we generate an attack based on a centrality measure - 
+    you can possibly input the node_map to convert the attack to have the correct nodeID'''
+    if node_map == False:
+        node_map = range(len(centrality)) 
+    else:
+        node_map = list(node_map.values())
+    # dictionary: key=Node, value=centrality
+    zipped = dict(zip(node_map, centrality)) 
+    # list: attack strategy = nodes sorted by centrality (descending)
+    attackStrategy = sorted(zipped, reverse = True, key = zipped.get)
+    return attackStrategy
+
+def network_attack_sampled(G, attackStrategy, sampling = 0):
+    '''Attack a network in a sampled manner... recompute links and largest component after every xth node removal, according to some - 
+    G: is the input graph, preferably as a sparse array.
+    inputed attack strategy
+    Note: if sampling is not set, it defaults to sampling every 1%, otherwise, sampling is an integer
+    that is equal to the number of nodes you want to skip every time you sample. 
+    So for example sampling = int(len(G)/100) would sample every 1% of the nodes removed'''
+    
+    if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
+        GAdj = nx.to_scipy_sparse_array(G) #convert to scipy sparse if it is a graph 
+    else:
+        GAdj = G.copy()
+
+    N = GAdj.shape[0]
+    initialComponent = get_component_size(GAdj) # for normalization to lcc(0) = 1
+    initialLinks = get_link_size(G)
+
+    if sampling == 0: # sample every 1% of the nodes removed by default
+        sampling = int(N/100)
+
+    # evolution of the links and lcc, according to sampling
+    links = np.zeros(int(N/sampling)) 
+    component = np.zeros(int(N/sampling))
+
+    j = 0 # save data every N/sampling steps
+    for i in range(N-1):
+        if i%sampling == 0:
+            if i != 0: # avoid saving the initial condition twice
+                GAdj = remove_node(GAdj, attackStrategy[i-sampling:i]) # as we skipped sampling nodes, we remove the skipped nodes all at once
+            links[j] = get_link_size(GAdj)/initialLinks # get the interest parameters (normalized)
+            component[j] = get_component_size(GAdj)/initialComponent
+            j += 1
+
+    return component, links
+
+
+        
+        
