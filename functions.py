@@ -57,6 +57,16 @@ def domirank(G, sigma = -1, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep
     #     conv_iter = maxIter
     return Psi/np.max(Psi) #normalize to [0,1]
 
+def relabel_nodes(G, yield_map = False):
+    '''relabels the nodes to be from 0, ... len(G).
+    1. Yield_map returns an extra output as a dict. in case you want to save the hash-map to retrieve node-id'''
+    if yield_map == True:
+        nodes = dict(zip(range(len(G)), G.nodes()))
+        G = nx.relabel_nodes(G, dict(zip(G.nodes(), range(len(G)))))
+        return G, nodes
+    else:
+        G = nx.relabel_nodes(G, dict(zip(G.nodes(), range(len(G)))))
+        return G
 
 # attack functions
 
@@ -175,6 +185,46 @@ def network_attack_sampled(G, attackStrategy, sampling = 0):
 
     return component, links
 
+def network_attack_plotting(G, attackStrategy, plotting, psi, directory = "Plots/"):
+    '''Attack a network in a sampled manner... recompute links and largest component after every xth node removal, according to some - 
+    G: is the input graph, preferably as a sparse array.
+    inputed attack strategy
+    Note: if sampling is not set, it defaults to sampling every 1%, otherwise, sampling is an integer
+    that is equal to the number of nodes you want to skip every time you sample. 
+    So for example sampling = int(len(G)/100) would sample every 1% of the nodes removed'''
+    
+    GAdj = G.copy()
+    nx.set_node_attributes(GAdj, dict(enumerate(psi)), 'centr') # set the domirank as a node attribute for plotting purposes
 
+    N = G.number_of_nodes()
+    initialComponent = get_component_size(GAdj) # for normalization to lcc(0) = 1
+    initialLinks = get_link_size(G)
+
+    plotting_step = []
+    for i in range(len(plotting)):
+        plotting_step.append(int(N * plotting[i])) # convert percentage to number of removed nodes
+    plotting_step = sorted(plotting_step) # sort the plotting steps in case they are not sorted
+    if 0 not in plotting_step:
+        plotting_step = [0] + plotting_step # add the initial condition to the plotting steps if it is not already there
+
+    pos = nx.spring_layout(G, seed=200) # coherent layout positions for every plot
+
+    for j in range(len(plotting_step)):
+        if j != 0:
+            GAdj = remove_node(GAdj, attackStrategy[plotting_step[j-1]:plotting_step[j]]) # as we skipped sampling nodes, we remove the skipped nodes all at once
+            for k in attackStrategy[plotting_step[j-1]:plotting_step[j]]:
+                if k in pos:
+                    pos.pop(k) # remove the position of the removed nodes to avoid plotting them, but keeping original position
+
+        links = get_link_size(GAdj)/initialLinks # get the interest parameters (normalized)
+        component = get_component_size(GAdj)/initialComponent
         
+        out = directory + f"p{plotting[j]:.2f}.png"
+        
+        psi2 = list(nx.get_node_attributes(GAdj, "centr").values()) # color scale
+        nx.draw(GAdj, pos, cmap=plt.get_cmap('cividis'), node_color=psi2, font_color='white')    
+        plt.title(f"p={plotting[j]:.2f},  lcc={component:.2f},  links={links:.2f}", fontsize = 12)
+        plt.savefig(out, dpi=300, bbox_inches='tight')
+        plt.close()
+    return
         

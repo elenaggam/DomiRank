@@ -11,16 +11,19 @@ import functions as f
 
 
 G = nx.grid_2d_graph(7, 7, periodic=False) #create a grid graph
+G = f.relabel_nodes(G) #relabel the nodes to be from 0 to N-1 instead of tuples
 eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float))
 min = np.min(eigenvalues)
 del eigenvalues, _
 
-attack = f.generate_attack(f.domirank(G, sigma=-0.999/min)) #generate the attack using the centrality (descending)
-lcc, links = f.network_attack_sampled(G, attack, sampling = 1) #attack the network and
+psi = f.domirank(G, sigma=-0.999/min)
+attack = f.generate_attack(psi) #generate the attack using the centrality (descending)
+plotting = [0.0, 0.18, 0.37]
+f.network_attack_plotting(G, attack, plotting = plotting, psi = psi, directory = f"Grid7/attack/0.999_") #attack the network and
 
+lcc, links = f.network_attack_sampled(nx.to_scipy_sparse_array(G), attack, sampling =1) #attack the network and
 
-
-out = f"Grid7/"
+out = "Grid7/attack/"
 if not os.path.exists(out):
     os.makedirs(out)
 x = np.linspace(0,1, lcc.shape[0])
