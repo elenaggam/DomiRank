@@ -169,7 +169,9 @@ def network_attack_sampled(G, attackStrategy, sampling = 0):
 
     if sampling == 0: # sample every 1% of the nodes removed by default
         sampling = int(N/100)
-
+        if sampling == 0: # if the graph is too small, we sample every node
+            sampling = 1
+    
     # evolution of the links and lcc, according to sampling
     links = np.zeros(int(N/sampling)) 
     component = np.zeros(int(N/sampling))
@@ -228,3 +230,27 @@ def network_attack_plotting(G, attackStrategy, plotting, psi, directory = "Plots
         plt.close()
     return
         
+def optimal_sigma(G, delta_sigma = 0.001, sampling = 0, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep = 10):
+    
+    if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
+        GAdj = nx.to_scipy_sparse_array(G).astype(float) #convert to scipy sparse if it is a graph 
+    else:
+        GAdj = G.copy()
+    
+    eig = eigsh(GAdj, return_eigenvectors=False) # get the largest eigenvalue of the adjacency matrix
+    sigma_max = -0.9999/np.min(eig)
+    sigma_range = np.arange(0.001, sigma_max, delta_sigma) 
+
+    optimal_sigma = -1.
+    min_lcc = -1.
+
+    for sigma in sigma_range:
+        Psi = domirank(GAdj, sigma = sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+        attack = generate_attack(Psi)
+        lcc, _ = network_attack_sampled(GAdj, attack, sampling = sampling) # get the lcc after attacking with the generated attack strategy
+        area_lcc = np.trapz(lcc)
+        if area_lcc < min_lcc or min_lcc == -1:
+            min_lcc = area_lcc
+            optimal_sigma = sigma
+        
+    return optimal_sigma

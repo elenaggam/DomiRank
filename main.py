@@ -9,23 +9,28 @@ import time
 
 import functions as f
 
-out = "ER/attack/"
-if not os.path.exists(out):
-    os.makedirs(out)
 
-sigma = 0.9
+
 plotting = [0.0, 0.09, 0.19]
 
-G = nx.erdos_renyi_graph(32, 0.12, seed=82) #create an ER graph
-G = f.relabel_nodes(G) #relabel the nodes to be from 0 to N-1 instead of tuples
+G = nx.erdos_renyi_graph(32, 0.12, seed=82) #create a grid graph
+G = f.relabel_nodes(G) #relabelthe nodes to be from 0 to N-1 instead of tuples
 eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float))
 min = np.min(eigenvalues)
 del eigenvalues, _
 
-psi = f.domirank(G, sigma=-sigma/min)
+sigma = f.optimal_sigma(G)
+print(f"Optimal sigma: {sigma:.4f}, {sigma*min:.4f} times the minimum eigenvalue")
+
+psi = f.domirank(G, sigma=sigma)
 between = list(nx.betweenness_centrality(G).values()) #compute the centrality measures
 close = list(nx.closeness_centrality(G).values())
-page = list(nx.pagerank(G, alpha=-sigma/min, max_iter=1000).values()) #compute the centrality measures
+page = list(nx.pagerank(G, max_iter=1000).values()) #compute the centrality measures
+
+sigma = -sigma*min
+out = f"ER/12_attack_optimal_{sigma:.3f}/"
+if not os.path.exists(out):
+    os.makedirs(out)
 
 attack = f.generate_attack(psi) #generate the attack using the centrality (descending)
 attack_betweenness = f.generate_attack(between) #generate the attack using the centrality (descending)
@@ -37,10 +42,10 @@ lcc_betweenness, links_betweenness = f.network_attack_sampled(nx.to_scipy_sparse
 lcc_closeness, links_closeness = f.network_attack_sampled(nx.to_scipy_sparse_array(G), attack_closeness, sampling =1) #attack the network and
 lcc_pagerank, links_pagerank = f.network_attack_sampled(nx.to_scipy_sparse_array(G), attack_pagerank, sampling =1) #attack the network and
 
-f.network_attack_plotting(G, attack, plotting = plotting, psi = psi, directory = out + f"domirank_{sigma}_") #attack the network and
-f.network_attack_plotting(G, attack_betweenness, plotting = plotting, psi = between, directory = out + f"betweenness_{sigma}_") #attack the network and
-f.network_attack_plotting(G, attack_closeness, plotting = plotting, psi = close, directory = out + f"closeness_{sigma}_") #attack the network and
-f.network_attack_plotting(G, attack_pagerank, plotting = plotting, psi = page, directory = out + f"pagerank_{sigma}_") #attack the network and
+f.network_attack_plotting(G, attack, plotting = plotting, psi = psi, directory = out + f"domirank_") #attack the network and
+f.network_attack_plotting(G, attack_betweenness, plotting = plotting, psi = between, directory = out + f"betweenness_") #attack the network and
+f.network_attack_plotting(G, attack_closeness, plotting = plotting, psi = close, directory = out + f"closeness_") #attack the network and
+f.network_attack_plotting(G, attack_pagerank, plotting = plotting, psi = page, directory = out + f"pagerank_") #attack the network and
 
 x = np.linspace(0,1, lcc.shape[0])
 plt.plot(x, lcc, label = 'domirank')
@@ -52,7 +57,7 @@ plt.axvline(x=plotting[2], color='grey', linestyle='--')
 plt.legend(fontsize = 14)
 plt.xlabel('fraction of nodes removed')
 plt.ylabel('largest connected component')
-plt.savefig(out + f"lcc_{sigma}.png", dpi=300, bbox_inches='tight')
+plt.savefig(out + f"lcc.png", dpi=300, bbox_inches='tight')
 plt.close()
 
 plt.plot(x, links, label = 'domirank')
@@ -64,7 +69,7 @@ plt.axvline(x=plotting[2], color='grey', linestyle='--')
 plt.legend(fontsize = 14)
 plt.xlabel('fraction of nodes removed')
 plt.ylabel('number of links')
-plt.savefig(out + f"links_{sigma}.png", dpi=300, bbox_inches='tight')
+plt.savefig(out + f"links.png", dpi=300, bbox_inches='tight')
 plt.close()
 
 # time_file = open(out + "times.txt", "w")
