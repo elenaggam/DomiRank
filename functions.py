@@ -207,7 +207,7 @@ def network_attack_plotting(G, attackStrategy, plotting, psi, directory = "Plots
     if 0 not in plotting_step:
         plotting_step = [0] + plotting_step # add the initial condition to the plotting steps if it is not already there
 
-    pos = nx.spring_layout(G, seed=200) # coherent layout positions for every plot
+    pos = nx.spring_layout(G, iterations=500, seed=42) # coherent layout positions for every plot
 
     for j in range(len(plotting_step)):
         if j != 0:
