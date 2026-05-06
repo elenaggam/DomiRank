@@ -1,12 +1,11 @@
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.sparse.linalg import eigsh
 import scipy
 import scipy.sparse
-import os
-import time
+from scipy.sparse.linalg import eigsh
 
+####### paper #######
 
 def domirank(G, sigma = -1, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep = 10):
     '''
@@ -42,6 +41,7 @@ def domirank(G, sigma = -1, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep
         Psi += tempVal.real
         if i% checkStep == 0:
             if np.abs(tempVal).sum() < boundary:
+                # print(f"Converged at iteration {i}")
                 # conv_iter = i
                 break
             # maxVals[j] = tempVal.max()
@@ -67,6 +67,40 @@ def relabel_nodes(G, yield_map = False):
     else:
         G = nx.relabel_nodes(G, dict(zip(G.nodes(), range(len(G)))))
         return G
+
+def find_eigenvalue(G, minVal = 0, maxVal = 1, maxDepth = 100, dt = 0.1, epsilon = 1e-5, maxIter = 100, checkStep = 10):
+    '''
+    G: is the input graph as a sparse array.
+    Finds the largest negative eigenvalue of an adjacency matrix using the DomiRank algorithm.
+    Currently this function is only single-threaded, as the bisection algorithm only allows for single-threaded
+    exection. Note, that this algorithm is slightly different, as it uses the fact that DomiRank diverges
+    at values larger than -1/lambN to its benefit, and thus, it is not exactly bisection theorem. I haven't
+    tested in order to see which exact value is the fastest for execution, but that will be done soon!
+    Some notes:
+    Increase maxDepth for increased accuracy.
+    Increase maxIter if DomiRank doesn't start diverging within 100 iterations -- i.e. increase at the expense of 
+    increased computational cost if you want potential increased accuracy.
+    Decrease checkstep for increased error-finding for the values of sigma that are too large, but higher compcost
+    if you are frequently less than the value (but negligible compcost).
+    '''
+    x = (minVal + maxVal)/G.sum(axis=-1).max()
+    minValStored = 0
+    for i in range(maxDepth):
+        if maxVal - minVal < epsilon:
+            break
+        if domirank(G, x, dt, epsilon, maxIter, checkStep)[0]:
+            minVal = x
+            x = (minVal + maxVal)/2
+            minValStored = minVal
+        else:
+            maxVal = (x + maxVal)/2
+            x = (minVal + maxVal)/2
+        # if minVal == 0:
+        #     print(f'Current Interval : [-inf, -{1/maxVal}]')
+        # else:
+        #     print(f'Current Interval : [-{1/minVal}, -{1/maxVal}]')
+    finalVal = (maxVal + minVal)/2
+    return -1/finalVal
 
 # attack functions
 
@@ -187,13 +221,102 @@ def network_attack_sampled(G, attackStrategy, sampling = 0):
 
     return component, links
 
-def network_attack_plotting(G, attackStrategy, plotting, psi, directory = "Plots/"):
-    '''Attack a network in a sampled manner... recompute links and largest component after every xth node removal, according to some - 
-    G: is the input graph, preferably as a sparse array.
-    inputed attack strategy
-    Note: if sampling is not set, it defaults to sampling every 1%, otherwise, sampling is an integer
-    that is equal to the number of nodes you want to skip every time you sample. 
-    So for example sampling = int(len(G)/100) would sample every 1% of the nodes removed'''
+# optimal sigma
+
+def process_iteration(q, i, sigma, spArray, maxIter, checkStep, dt, epsilon, sampling):
+    tf, domiDist = domirank(spArray, sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+    domiAttack = generate_attack(domiDist)
+    ourTempAttack, __ = network_attack_sampled(spArray, domiAttack, sampling = sampling)
+    finalErrors = ourTempAttack.sum()
+    q.put(finalErrors) # save result in mp queue
+
+def optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 100, dt = 0.1, epsilon = 1e-5, maxIter = 100, checkStep = 10, maxDepth = 100, sampling = 0):
+    ''' This part finds the optimal sigma by searching the space, here are the novel parameters:
+    spArray: is the input sparse array/matrix for the network.
+    startVal: is the starting value of the space that you want to search.
+    endVal: is the ending value of the space that you want to search (normally it should be the eigenvalue)
+    iterationNo: the number of partitions of the space between lambN that you set
+    
+    return : the function returns the value of sigma - the numerator of the fraction of (\sigma)/(-1*lambN)
+    '''
+    if endVal == 0:
+        endVal = find_eigenvalue(spArray, maxDepth = maxDepth, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+    import multiprocessing as mp
+    endval = -0.9999/endVal
+    # array[start, end, step] making sure to include endval with + (endval-startval)/iterationNo
+    tempRange = np.arange(startval, endval + (endval-startval)/iterationNo, (endval-startval)/iterationNo)
+    processes = [] # storing parallel processes
+    q = mp.Queue() # mp queue to store the results of each process
+    for i, sigma in enumerate(tempRange):
+        p = mp.Process(target=process_iteration, args=(q, i, sigma, spArray, maxIter, checkStep, dt, epsilon, sampling))
+        p.start() # start the process 
+        processes.append(p) # save process info
+
+    results = []
+    for p in processes:
+        p.join() # wait for the process to finish
+        result = q.get() # get process result
+        results.append(result)
+    finalErrors = np.array(results)
+    minEig = np.where(finalErrors == finalErrors.min())[0][-1] # index of lowest lcc curve area
+    minEig = tempRange[minEig] # sigma of lowest lcc curve area
+    return minEig, finalErrors # sigma and areas
+
+####### end of paper #######
+
+def old_optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 100, dt = 0.1, epsilon = 1e-5, maxIter = 100, checkStep = 10, maxDepth = 100, sampling = 0):
+    '''optimal sigma sequentally (not parallelized)'''
+    
+    if endVal == 0:
+        endVal = find_eigenvalue(spArray, maxDepth = maxDepth, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+
+    endval = -1./endVal # -0.9999/lambda
+    # array[start, end, step] making sure to include endval with + (endval-startval)/iterationNo
+    tempRange = np.arange(startval, endval, (endval-startval)/iterationNo)
+
+    finalErrors = []
+
+    for sigma in tempRange:
+        Psi = domirank(spArray, sigma = sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+        attack = generate_attack(Psi)
+        lcc, _ = network_attack_sampled(spArray, attack, sampling = sampling) # get the lcc after attacking with the generated attack strategy
+        finalErrors.append(np.sum(lcc))
+    
+    finalErrors = np.array(finalErrors)
+    index = np.where(finalErrors == finalErrors.min())[0][-1] # index of lowest lcc curve area
+    minEig = tempRange[index] # sigma of lowest lcc curve area
+    print(f"indexa: {minEig:.4f}, {minEig*endVal:.4f}/λ")
+    plt.plot(-tempRange*endVal, finalErrors)
+    plt.axvline(x=-minEig*endVal, color='red', linestyle='--', label=f'Optimal Sigma: {minEig:.4f}')
+    plt.savefig("optimal_sigma.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    return minEig, finalErrors # sigma and areas
+
+def old2_optimal_sigma(G, delta_sigma = 0.001, sampling = 0, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep = 10):
+    
+    if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
+        GAdj = nx.to_scipy_sparse_array(G).astype(float) #convert to scipy sparse if it is a graph 
+    else:
+        GAdj = G.copy()
+    
+    eig = eigsh(GAdj, return_eigenvectors=False) # get the largest eigenvalue of the adjacency matrix
+    sigma_max = -1.0/np.min(eig)
+    sigma_range = np.arange(0.001, sigma_max, delta_sigma) 
+
+    lcc_list = []
+
+    for sigma in sigma_range:
+        Psi = domirank(GAdj, sigma = sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+        attack = generate_attack(Psi)
+        lcc, _ = network_attack_sampled(GAdj, attack, sampling = sampling) # get the lcc after attacking with the generated attack strategy
+        area_lcc = np.sum(lcc)
+        lcc_list.append(area_lcc)
+    
+    optimal_sigma = sigma_range[np.argmin(lcc_list)]
+    
+    return optimal_sigma, lcc_list
+
+def network_attack_plotting_step(G, attackStrategy, p, psi, title, ax):
     
     GAdj = G.copy()
     nx.set_node_attributes(GAdj, dict(enumerate(psi)), 'centr') # set the domirank as a node attribute for plotting purposes
@@ -202,55 +325,45 @@ def network_attack_plotting(G, attackStrategy, plotting, psi, directory = "Plots
     initialComponent = get_component_size(GAdj) # for normalization to lcc(0) = 1
     initialLinks = get_link_size(G)
 
-    plotting_step = []
-    for i in range(len(plotting)):
-        plotting_step.append(int(N * plotting[i])) # convert percentage to number of removed nodes
-    plotting_step = sorted(plotting_step) # sort the plotting steps in case they are not sorted
-    if 0 not in plotting_step:
-        plotting_step = [0] + plotting_step # add the initial condition to the plotting steps if it is not already there
+    plotting_step = int(N * p)
+    
+    pos = nx.spring_layout(G, iterations=500, seed=200) # coherent layout positions for every plot
 
-    pos = nx.spring_layout(G, iterations=500, seed=42) # coherent layout positions for every plot
+    GAdj = remove_node(GAdj, attackStrategy[0:plotting_step]) # as we skipped sampling nodes, we remove the skipped nodes all at once
+    for k in attackStrategy[0:plotting_step]:
+        if k in pos:
+            pos.pop(k) # remove the position of the removed nodes to avoid plotting them, but keeping original position
 
-    for j in range(len(plotting_step)):
-        if j != 0:
-            GAdj = remove_node(GAdj, attackStrategy[plotting_step[j-1]:plotting_step[j]]) # as we skipped sampling nodes, we remove the skipped nodes all at once
-            for k in attackStrategy[plotting_step[j-1]:plotting_step[j]]:
-                if k in pos:
-                    pos.pop(k) # remove the position of the removed nodes to avoid plotting them, but keeping original position
+    links = get_link_size(GAdj)/initialLinks # get the interest parameters (normalized)
+    component = get_component_size(GAdj)/initialComponent
+    
 
-        links = get_link_size(GAdj)/initialLinks # get the interest parameters (normalized)
-        component = get_component_size(GAdj)/initialComponent
+    psi2 = list(nx.get_node_attributes(GAdj, "centr").values()) # color scale
+    
+    nx.draw(GAdj, pos, cmap=plt.get_cmap('cividis'), node_color=psi2, font_color='white', ax=ax)    
+    ax.set_title(title, fontsize = 20)
+
+    return links, component
+
+def network_attack_plotting(G, attackStrategy, p_values, centrality, titles, directory=None):
+    '''This function plots the attack for different values of p, and saves the plots in the specified directory.'''
+    
+    if len(titles) != centrality.shape[0] or centrality.shape[0] != attackStrategy.shape[0]:
+        print("Error: titles, centrality and attackStrategy must have the same length")
+        return
+    
+    for i, p in enumerate(p_values):
+        fig, axes = plt.subplots(2, 2, figsize=(12,12))
+        ax = axes.flatten()
+        for j in range(centrality.shape[0]):
+            links, component = network_attack_plotting_step(G, attackStrategy[j], p, centrality[j], titles[j], ax[j])
         
-        out = directory + f"p{plotting[j]:.2f}.png"
-        
-        psi2 = list(nx.get_node_attributes(GAdj, "centr").values()) # color scale
-        nx.draw(GAdj, pos, cmap=plt.get_cmap('cividis'), node_color=psi2, font_color='white')    
-        plt.title(f"p={plotting[j]:.2f},  lcc={component:.2f},  links={links:.2f}", fontsize = 12)
+        if directory is not None:
+            out = directory + f"p_{int(p*100)}.png"
+        else:
+            out = f"p_{int(p*100)}.png"
+        fig.suptitle(f"p = {p:.2f}", fontsize=22)
         plt.savefig(out, dpi=300, bbox_inches='tight')
         plt.close()
+
     return
-        
-def optimal_sigma(G, delta_sigma = 0.001, sampling = 0, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep = 10):
-    
-    if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
-        GAdj = nx.to_scipy_sparse_array(G).astype(float) #convert to scipy sparse if it is a graph 
-    else:
-        GAdj = G.copy()
-    
-    eig = eigsh(GAdj, return_eigenvectors=False) # get the largest eigenvalue of the adjacency matrix
-    sigma_max = -0.9999/np.min(eig)
-    sigma_range = np.arange(0.001, sigma_max, delta_sigma) 
-
-    optimal_sigma = -1.
-    min_lcc = -1.
-
-    for sigma in sigma_range:
-        Psi = domirank(GAdj, sigma = sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
-        attack = generate_attack(Psi)
-        lcc, _ = network_attack_sampled(GAdj, attack, sampling = sampling) # get the lcc after attacking with the generated attack strategy
-        area_lcc = np.trapz(lcc)
-        if area_lcc < min_lcc or min_lcc == -1:
-            min_lcc = area_lcc
-            optimal_sigma = sigma
-        
-    return optimal_sigma

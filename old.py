@@ -67,3 +67,28 @@ def domirank(G, sigma = -1, dt = 0.1, maxsteps = 10000, epsilon = 1e-5):
     if conv_iter == 0:
         conv_iter = maxsteps
     return gamma/np.max(gamma), conv_iter #normalize to [0,1]
+
+# def old_optimal_sigma(G, delta_sigma = 0.001, sampling = 0, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep = 10):
+    
+#     if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
+#         GAdj = nx.to_scipy_sparse_array(G).astype(float) #convert to scipy sparse if it is a graph 
+#     else:
+#         GAdj = G.copy()
+    
+#     eig = eigsh(GAdj, return_eigenvectors=False) # get the largest eigenvalue of the adjacency matrix
+#     sigma_max = -0.9999/np.min(eig)
+#     sigma_range = np.arange(0.001, sigma_max, delta_sigma) 
+
+#     optimal_sigma = -1.
+#     min_lcc = -1.
+
+#     for sigma in sigma_range:
+#         Psi = domirank(GAdj, sigma = sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+#         attack = generate_attack(Psi)
+#         lcc, _ = network_attack_sampled(GAdj, attack, sampling = sampling) # get the lcc after attacking with the generated attack strategy
+#         area_lcc = np.sum(lcc)
+#         if area_lcc < min_lcc or min_lcc == -1:
+#             min_lcc = area_lcc
+#             optimal_sigma = sigma
+        
+#     return optimal_sigma
