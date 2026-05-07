@@ -199,8 +199,8 @@ def network_attack_sampled(G, attackStrategy, sampling = 0):
         GAdj = G.copy()
 
     N = GAdj.shape[0]
-    initialComponent = get_component_size(GAdj) # for normalization to lcc(0) = 1
-    initialLinks = get_link_size(G)
+    initialComponent = float(get_component_size(GAdj)) # for normalization to lcc(0) = 1
+    initialLinks = float(get_link_size(G))
 
     if sampling == 0: # sample every 1% of the nodes removed by default
         sampling = int(N/100)
@@ -265,7 +265,7 @@ def optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 100, d
 
 ####### end of paper #######
 
-def old_optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 100, dt = 0.1, epsilon = 1e-5, maxIter = 100, checkStep = 10, maxDepth = 100, sampling = 0):
+def old_optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 100, dt = 0.1, epsilon = 1e-5, maxIter = 100, checkStep = 10, maxDepth = 100, sampling = 0, directory = None):
     '''optimal sigma sequentally (not parallelized)'''
     
     if endVal == 0:
@@ -286,6 +286,13 @@ def old_optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 10
     finalErrors = np.array(finalErrors)
     minEig = np.where(finalErrors == finalErrors.min())[0][-1] # index of lowest lcc curve area
     minEig = tempRange[minEig]
+
+    if directory is not None:
+        plt.plot(-tempRange*endVal, finalErrors)
+        plt.xlabel("sigma/λ")
+        plt.ylabel("Area under LCC curve")
+        plt.savefig(directory + "sigma.png", dpi=300, bbox_inches='tight')
+        plt.close()
 
     return minEig, finalErrors # sigma and areas
 
@@ -363,4 +370,68 @@ def network_attack_plotting(G, attackStrategy, p_values, centrality, titles, dir
         plt.savefig(out, dpi=300, bbox_inches='tight')
         plt.close()
 
+    return
+
+def average_domi_attack(N, network_function, network_args, base = "results/", avgN = 20, startval = 0.000001, iterationNo = 100, dt = 0.1, epsilon = 1e-5, maxIter = 100, checkStep = 10, maxDepth = 100, sampling = 0):
+    
+    lcc_values = np.zeros(int(N/sampling)) # initialize lcc values for averaging
+    links_values = np.zeros(int(N/sampling)) # initialize links values for averaging
+    
+    file = open(f"{base}sigma.txt", "w")
+    avg_eig = 0
+    avg_sigma = 0
+
+    for j in range(avgN):
+        G = network_function(**network_args)
+        G = relabel_nodes(G) 
+        sparse_G = nx.to_scipy_sparse_array(G)
+        eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float), k=1,which='SA')
+        eig = np.min(eigenvalues)
+
+        sigma, _ = old_optimal_sigma(sparse_G, endVal = eig, sampling = sampling, iterationNo=iterationNo, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep, maxDepth = maxDepth)
+        psi = domirank(sparse_G, sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+        attack = generate_attack(psi)
+        lcc, links = network_attack_sampled(G, attack, sampling = sampling)
+
+        file.write(f"{sigma:.4f}\t{eig:.4f}\n")
+        avg_sigma += sigma
+        avg_eig += eig
+        lcc_values += np.array(lcc)
+        links_values += np.array(links)
+
+        del G, sparse_G, psi, lcc, links # free memory
+
+    file.write(f"\n{avg_sigma/avgN:.4f}\t{avg_eig/avgN:.4f}\n")
+    file.close()
+
+    lcc_values /= float(avgN)
+    links_values /= float(avgN)
+
+    np.savetxt(f"{base}Domirank_averaged_lcc_links.txt", np.array([lcc_values, links_values]).T, fmt = "%.4f") # save the lcc and links values for the attack
+    
+    return
+
+def average_attack(N, network_function, network_args, centrality_name, centrality_func, base = "results/", avgN = 20, sampling = 0):
+    
+    lcc_values = np.zeros(int(N/sampling)) # initialize lcc values for averaging
+    links_values = np.zeros(int(N/sampling)) # initialize links values for averaging
+
+    for j in range(avgN):
+        G = network_function(**network_args)
+        G = relabel_nodes(G) 
+
+        centrality = centrality_func(G)
+        if isinstance(centrality, dict):
+            centrality = np.array(list(centrality.keys()))
+        
+        lcc, links = network_attack_sampled(G, centrality, sampling = sampling)
+
+        lcc_values += np.array(lcc)
+        links_values += np.array(links)
+
+    lcc_values /= float(avgN)
+    links_values /= float(avgN)
+
+    np.savetxt(f"{base}{centrality_name}_averaged_lcc_links.txt", np.array([lcc_values, links_values]).T, fmt = "%.4f") # save the lcc and links values for the attack
+    
     return

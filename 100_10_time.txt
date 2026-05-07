@@ -1,0 +1,5 @@
+WS: 35.71 seconds
+ER (high degree): 41.94 seconds
+ER (low degree): 42.36 seconds
+BA: 43.46 seconds
+RGG: 42.83 seconds
