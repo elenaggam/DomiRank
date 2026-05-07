@@ -12,34 +12,47 @@ titles = ['Domirank', 'Betweenness', 'Closeness', 'PageRank']
 # BA 1, seed=82
 
 # graph 
-N = 32
-G = nx.erdos_renyi_graph(N, 0.12, seed=23) # create the graph
+N = 25
+avg_sigma = 0
+avgN = 10
+avg_eig = 0
+file = open(f"BA_avg{avgN}.txt", "w")
+for i in range(avgN):
+    G = nx.barabasi_albert_graph(N, 1) # create the graph
+    sparse_G = nx.to_scipy_sparse_array(G)
+    G = f.relabel_nodes(G) # relabel the nodes to be from 0 to N-1 instead of tuples
+    eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float))
+    eig = np.min(eigenvalues) # lambda_N
+
+    # optimal sigma
+    sigma, _ = f.old_optimal_sigma(sparse_G, endVal = eig, sampling = 1, iterationNo=1000) # compute the optimal sigma for the graph
+    file.write(f"{sigma:.4f}\t{-sigma*eig:.4f}\n")
+    avg_sigma += sigma
+    avg_eig += eig
+
+avg_sigma /= avgN
+avg_eig /= avgN
+file.close()
+G = nx.barabasi_albert_graph(N, 1, seed=82) # create the graph
 sparse_G = nx.to_scipy_sparse_array(G)
 G = f.relabel_nodes(G) # relabel the nodes to be from 0 to N-1 instead of tuples
-eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float))
-eig = np.min(eigenvalues) # lambda_N
-
-
-# optimal sigma
-sigma, _ = f.old_optimal_sigma(sparse_G, endVal = eig, sampling = 1, iterationNo=1000) # compute the optimal sigma for the graph
-print(f"main: {sigma:.4f}, {sigma*eig:.4f}/λ")
 
 # data output
-out = f"ER/attack_optimal_{-sigma*eig:.3f}/" # sigma times the minimum eigenvalue
+out = f"BA/attack_avg{avgN}_{-avg_sigma*avg_eig:.3f}/" # sigma times the minimum eigenvalue
 if not os.path.exists(out):
     os.makedirs(out)
-plotting = [0.0, 0.09, 0.19, 0.29, 0.49] # p of the attack to plot
+plotting = [0.0, 0.08, 0.18, 0.28, 0.4] # p of the attack to plot
 
 
-fig1 = plt.figure(1)
-ourRange = np.linspace(0,1, _.shape[0]) 
-index = np.where(_ == _.min())[0][-1]
-plt.plot(ourRange, _)
-plt.plot(ourRange[index],_[index], 'ro', mfc = 'none', markersize = 10)
-plt.xlabel('sigma')
-plt.ylabel('loss')
-plt.savefig(out+f"optimal_sigma_{-sigma*eig:.2f}.png", dpi=300, bbox_inches='tight')
-plt.close()
+# fig1 = plt.figure(1)
+# ourRange = np.linspace(0,1, _.shape[0]) 
+# index = np.where(_ == _.min())[0][-1]
+# plt.plot(ourRange, _)
+# plt.plot(ourRange[index],_[index], 'ro', mfc = 'none', markersize = 10)
+# plt.xlabel('sigma')
+# plt.ylabel('loss')
+# plt.savefig(out+f"optimal_sigma_{-avg_sigma*eig:.2f}.png", dpi=300, bbox_inches='tight')
+# plt.close()
 
 
 
