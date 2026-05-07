@@ -31,9 +31,10 @@ def domirank(G, sigma = -1, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep
     
     # maxVals = np.zeros(int(maxIter/checkStep)).astype(np.float32)
     # j = 0
-    pGAdj = sigma*G.astype(np.float32)
-    Psi = np.zeros(pGAdj.shape[0]).astype(np.float32)
-    dt = np.float32(dt)
+    # .astype(np.float32)
+    # dt = np.float32(dt)
+    pGAdj = sigma*G
+    Psi = np.zeros(pGAdj.shape[0])
     boundary = epsilon*pGAdj.shape[0]*dt
     # conv_iter = 0
     for i in range(maxIter):
@@ -55,7 +56,7 @@ def domirank(G, sigma = -1, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep
             # j+=1
     # if conv_iter == 0:
     #     conv_iter = maxIter
-    return Psi/np.max(Psi) #normalize to [0,1]
+    return Psi
 
 def relabel_nodes(G, yield_map = False):
     '''relabels the nodes to be from 0, ... len(G).
@@ -270,9 +271,9 @@ def old_optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 10
     if endVal == 0:
         endVal = find_eigenvalue(spArray, maxDepth = maxDepth, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
 
-    endval = -1./endVal # -0.9999/lambda
+    endval = -0.9999/endVal # -0.9999/lambda
     # array[start, end, step] making sure to include endval with + (endval-startval)/iterationNo
-    tempRange = np.arange(startval, endval, (endval-startval)/iterationNo)
+    tempRange = np.arange(startval, endval + (endval-startval)/iterationNo, (endval-startval)/iterationNo)
 
     finalErrors = []
 
@@ -280,16 +281,12 @@ def old_optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 10
         Psi = domirank(spArray, sigma = sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
         attack = generate_attack(Psi)
         lcc, _ = network_attack_sampled(spArray, attack, sampling = sampling) # get the lcc after attacking with the generated attack strategy
-        finalErrors.append(np.sum(lcc))
-    
+        finalErrors.append(lcc.sum()) # get the area under the lcc curve as a measure of the attack's effectiveness
+
     finalErrors = np.array(finalErrors)
-    index = np.where(finalErrors == finalErrors.min())[0][-1] # index of lowest lcc curve area
-    minEig = tempRange[index] # sigma of lowest lcc curve area
-    print(f"indexa: {minEig:.4f}, {minEig*endVal:.4f}/λ")
-    plt.plot(-tempRange*endVal, finalErrors)
-    plt.axvline(x=-minEig*endVal, color='red', linestyle='--', label=f'Optimal Sigma: {minEig:.4f}')
-    plt.savefig("optimal_sigma.png", dpi=300, bbox_inches='tight')
-    plt.close()
+    minEig = np.where(finalErrors == finalErrors.min())[0][-1] # index of lowest lcc curve area
+    minEig = tempRange[minEig]
+
     return minEig, finalErrors # sigma and areas
 
 def old2_optimal_sigma(G, delta_sigma = 0.001, sampling = 0, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep = 10):

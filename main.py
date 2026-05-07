@@ -8,10 +8,12 @@ from scipy.sparse.linalg import eigsh
 
 
 titles = ['Domirank', 'Betweenness', 'Closeness', 'PageRank']
+# ER 0.12, seed=23
+# BA 1, seed=82
 
 # graph 
-N = 7
-G = nx.grid_2d_graph(N, N) # create the graph
+N = 32
+G = nx.erdos_renyi_graph(N, 0.12, seed=23) # create the graph
 sparse_G = nx.to_scipy_sparse_array(G)
 G = f.relabel_nodes(G) # relabel the nodes to be from 0 to N-1 instead of tuples
 eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float))
@@ -22,12 +24,23 @@ eig = np.min(eigenvalues) # lambda_N
 sigma, _ = f.old_optimal_sigma(sparse_G, endVal = eig, sampling = 1, iterationNo=1000) # compute the optimal sigma for the graph
 print(f"main: {sigma:.4f}, {sigma*eig:.4f}/λ")
 
-
 # data output
-out = f"Grid7/attack_optimal_{-sigma*eig:.3f}/" # sigma times the minimum eigenvalue
+out = f"ER/attack_optimal_{-sigma*eig:.3f}/" # sigma times the minimum eigenvalue
 if not os.path.exists(out):
     os.makedirs(out)
-plotting = [0.0, 0.18, 0.37] # p of the attack to plot
+plotting = [0.0, 0.09, 0.19, 0.29, 0.49] # p of the attack to plot
+
+
+fig1 = plt.figure(1)
+ourRange = np.linspace(0,1, _.shape[0]) 
+index = np.where(_ == _.min())[0][-1]
+plt.plot(ourRange, _)
+plt.plot(ourRange[index],_[index], 'ro', mfc = 'none', markersize = 10)
+plt.xlabel('sigma')
+plt.ylabel('loss')
+plt.savefig(out+f"optimal_sigma_{-sigma*eig:.2f}.png", dpi=300, bbox_inches='tight')
+plt.close()
+
 
 
 # compute the centrality measures and attacks
