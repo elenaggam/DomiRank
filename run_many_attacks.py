@@ -6,22 +6,22 @@ import time
 import functions as f
 from scipy.sparse.linalg import eigsh
 
-N = 500
+N = 1000
 
 centrality_titles = ['Domirank', 'Katz', 'Betweenness', 'Degree', 'Harmonic', 'Closeness', 'Eigenvector', 'Load', 'PageRank', 'Current-flow']
-centrality_func = [f.domirank, nx.katz_centrality_numpy, nx.betweenness_centrality, nx.degree_centrality, nx.harmonic_centrality, nx.closeness_centrality, nx.eigenvector_centrality_numpy, nx.load_centrality, nx.pagerank, nx.current_flow_betweenness_centrality]
+centrality_func = [f.domirank, nx.katz_centrality_numpy, nx.betweenness_centrality, nx.degree_centrality, nx.harmonic_centrality, nx.closeness_centrality, nx.eigenvector_centrality_numpy, nx.load_centrality, nx.pagerank]
 
-network_titles = ['WS', 'ER (high degree)', 'ER (low degree)', 'BA', 'RGG']
-network_functions = [nx.watts_strogatz_graph, nx.erdos_renyi_graph, nx.erdos_renyi_graph, nx.barabasi_albert_graph, nx.random_geometric_graph]
-network_args = [dict(n=N, k=4, p=0.12), dict(n=N, p=0.35),  dict(n=N, p=0.12), dict(n=N, m=6), dict(n=N, radius=np.sqrt((2*26)/(np.pi*N*(N-1))))]
+# network_titles = ['WS', 'ER (high degree)', 'ER (low degree)', 'BA', 'RGG']
+# network_functions = [nx.watts_strogatz_graph, nx.erdos_renyi_graph, nx.erdos_renyi_graph, nx.barabasi_albert_graph, nx.random_geometric_graph]
+# network_args = [dict(n=N, k=4, p=0.12), dict(n=N, p=20.0/(N-1.0)),  dict(n=N, p=6.0/(N-1.0)), dict(n=N, m=3), dict(n=N, radius=np.sqrt(16/(np.pi*N)))]
 
-plotting = [0.0, 0.08, 0.18, 0.28, 0.4] # p of the attack to plot
-# ER 0.12, seed=23
-# BA 1, seed=82
+network_titles = ['connected WS']
+network_functions = [nx.connected_watts_strogatz_graph]
+network_args = [dict(n=N, k=4, p=0.12)]
 
 # graph 
-avgN = 50
-sampling = 10
+avgN = 1
+sampling = 50
 
 time_file = open(f"{N}_time.txt", "w")
 
@@ -37,13 +37,22 @@ for i in range(len(network_functions)):
     eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float))
     eig = np.min(eigenvalues) # lambda_N
 
-    base = f"{network_titles[i]}/{N}_{sampling}/"
+    base = f"{network_titles[i]}/{N}_sigma{avgN}_s{sampling}/"
     if not os.path.exists(base):
         os.makedirs(base)
 
     figure = plt.figure()
 
-    sigma, _ = f.old_optimal_sigma(G, endVal = eig, directory = base)
+    sigma = 0
+    for a in range(avgN):
+        H = network_functions[i](**network_args[i])
+        H = f.relabel_nodes(H) # relabel the nodes to be from 0
+        eigenvaluesh, _ = eigsh(nx.to_scipy_sparse_array(H).astype(float))
+        eigh = np.min(eigenvaluesh) # lambda_N
+        sigma_h, _ = f.old_optimal_sigma(G, endVal = eigh, directory = base)
+        sigma += sigma_h
+    sigma /= avgN
+    print(f"Optimal sigma: {sigma*eig:.4f}/λ")
     psi = f.domirank(G, sigma=sigma) #compute the centrality measures
     attack = f.generate_attack(psi)
     lcc, links = f.network_attack_sampled(G, attack, sampling = sampling)
