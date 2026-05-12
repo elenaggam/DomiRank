@@ -92,3 +92,86 @@ def domirank(G, sigma = -1, dt = 0.1, maxsteps = 10000, epsilon = 1e-5):
 #             optimal_sigma = sigma
         
 #     return optimal_sigma
+
+
+
+# def sequential_recovery(G, p, attackStrategy, sampling = 0):
+
+#     if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
+#         GAdj = nx.to_scipy_sparse_array(G) #convert to scipy sparse if it is a graph 
+#     else:
+#         GAdj = G.copy()
+
+#     N = GAdj.shape[0]
+#     initialComponent = float(get_component_size(GAdj)) # for normalization to lcc(0) = 1
+#     initialLinks = float(get_link_size(G))
+
+#     if sampling == 0: # sample every 1% of the nodes removed by default
+#         sampling = int(N/100)
+#         if sampling == 0: # if the graph is too small, we sample every node
+#             sampling = 1
+    
+#     # evolution of the links and lcc, according to sampling
+#     links = np.zeros(int(N/sampling)) 
+#     component = np.zeros(int(N/sampling))
+
+#     j = 0 # save data every N/sampling steps
+#     for i in range(N-1):
+#         if i%sampling == 0:
+#             if i != 0: # avoid saving the initial condition twice
+#                 to_remove = attackStrategy[i-sampling:i] # as we skipped sampling nodes, we remove the skipped nodes all at once
+#                 for node in to_remove:
+#                     if np.random.rand() > p: # with probability p, we recover the nodes (not remove them)
+#                         print(f"deleted node {node} in iteration {i}")
+#                         GAdj = remove_node(GAdj, node) 
+
+#             links[j] = get_link_size(GAdj)/initialLinks # get the interest parameters (normalized)
+#             component[j] = get_component_size(GAdj)/initialComponent
+#             j += 1
+
+#     return component, links
+
+# def random_recovery(G, p, attackStrategy, sampling = 0):
+
+#     if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
+#         GAdj_og = nx.to_scipy_sparse_array(G) #convert to scipy sparse if it is a graph 
+#     else:
+#         GAdj_og = G.copy()
+
+#     N = GAdj_og.shape[0]
+#     initialComponent = float(get_component_size(GAdj_og)) # for normalization to lcc(0) = 1
+#     initialLinks = float(get_link_size(GAdj_og))
+
+#     if sampling == 0: # sample every 1% of the nodes removed by default
+#         sampling = int(N/100)
+#         if sampling == 0: # if the graph is too small, we sample every node
+#             sampling = 1
+    
+#     # evolution of the links and lcc, according to sampling
+#     links = np.zeros(int(N/sampling)) 
+#     component = np.zeros(int(N/sampling))
+
+#     removed_nodes = []
+
+#     GAdj = GAdj_og.copy()
+#     j = 0 # save data every N/sampling steps
+#     for i in range(N-1):
+#         if i%sampling == 0:
+#             if len(removed_nodes) > 0:
+#                 for node in range(sampling): # sampling time steps have passed
+#                     chosen = np.random.choice(removed_nodes) # choose a random node from the removed nodes
+#                     if np.random.rand() < p: # with probability p, we recover the nodes (not remove them)
+#                         removed_nodes.remove(chosen) # remove the chosen node from the removed nodes pool
+#                 print(len(removed_nodes))
+                
+#                 GAdj = remove_node(GAdj_og, removed_nodes)
+#             to_remove = attackStrategy[i-sampling:i] # as we skipped sampling nodes, we remove the skipped nodes all at once
+#             removed_nodes.extend(to_remove) 
+#             links[j] = get_link_size(GAdj)/initialLinks # get the interest parameters (normalized)
+#             component[j] = get_component_size(GAdj)/initialComponent
+#             j += 1
+
+#     return component, links
+
+
+

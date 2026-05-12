@@ -320,6 +320,7 @@ def old2_optimal_sigma(G, delta_sigma = 0.001, sampling = 0, dt = 0.1, epsilon =
     
     return optimal_sigma, lcc_list
 
+
 def network_attack_plotting_step(G, attackStrategy, p, psi, title, ax):
     
     GAdj = G.copy()
@@ -371,6 +372,7 @@ def network_attack_plotting(G, attackStrategy, p_values, centrality, titles, dir
         plt.close()
 
     return
+
 
 def average_domi_attack(N, network_function, network_args, base = "results/", avgN = 20, startval = 0.000001, iterationNo = 100, dt = 0.1, epsilon = 1e-5, maxIter = 100, checkStep = 10, maxDepth = 100, sampling = 0):
     
@@ -435,3 +437,124 @@ def average_attack(N, network_function, network_args, centrality_name, centralit
     np.savetxt(f"{base}{centrality_name}_averaged_lcc_links.txt", np.array([lcc_values, links_values]).T, fmt = "%.4f") # save the lcc and links values for the attack
     
     return
+
+
+
+def network_recovery(G_original, p, attackStrategy, method = "random"):
+    # removed nodes in attack strategy!
+    
+    to_recover = attackStrategy.copy()
+    G_recovering = nx.Graph() 
+
+    initialComponent = float(get_component_size(G_original)) # for normalization to lcc(0) = 1
+    initialLinks = float(get_link_size(G_original))
+    links = [0]
+    component = [0]
+    
+    time_steps = 0
+    while len(to_recover) > 0: # we want to recover all the nodes
+        if method == "random":
+            chosen = np.random.choice(to_recover)
+        elif method == "sequential":
+            chosen = to_recover[0]
+        check = 0
+        if np.random.rand() < p: # with probability p, we recover the node
+            G_recovering.add_node(chosen, **G_original.nodes[chosen]) # add the node to the recovering graph
+            to_recover.remove(chosen)
+            check = 1
+
+            # restore chosen's edges (if the neighbors have been recovered)
+            for neighbor in G_original.neighbors(chosen):
+                if G_recovering.has_node(neighbor):
+                    edge_data = G_original.get_edge_data(chosen, neighbor)
+                    G_recovering.add_edge(chosen, neighbor, **edge_data)
+        if check == 1: # if we recovered a node, we save the links and component size
+            links.append(get_link_size(G_recovering)/initialLinks) # get the interest parameters (normalized)
+            component.append(get_component_size(G_recovering)/initialComponent)
+        else:
+            links.append(links[-1]) 
+            component.append(component[-1])
+        time_steps += 1
+
+    return component, links
+
+def network_attack_recovery(G_original, p, attackStrategy, method = "random", sampling=0):
+    # removed nodes in attack strategy!
+
+    if type(G_original) != nx.classes.graph.Graph: #check if it is a networkx Graph
+        GAdj = nx.from_scipy_sparse_array(G_original) #convert to scipy sparse if it is a graph 
+    else:
+        GAdj = G_original.copy()
+
+    N = nx.number_of_nodes(GAdj)
+    initialComponent = float(get_component_size(GAdj)) # for normalization to lcc(0) = 1
+    initialLinks = float(get_link_size(GAdj))
+
+    if sampling == 0: # sample every 1% of the nodes removed by default
+        sampling = int(N/100)
+        if sampling == 0: # if the graph is too small, we sample every node
+            sampling = 1
+    
+    # evolution of the links and lcc, according to sampling
+    links = []
+    component = []
+
+    to_recover = []
+
+    for i in range(N-1):
+        if i%sampling == 0:
+            if i != 0: 
+                # attack process
+                attacked = attackStrategy[i-sampling:i] 
+                to_recover.extend(attacked) 
+                GAdj = remove_node(GAdj, attackStrategy[i-sampling:i]) 
+
+                for s in range(sampling): # in each step we remove sampling nodes, thus we take sampling time steps
+                    # recovery process
+                    if method == "sequential":
+                        chosen = to_recover[0]
+                    else : # random as default
+                        chosen = np.random.choice(to_recover)
+                    check = 0
+
+                    if np.random.rand() < p: # with probability p, we recover the node
+                        GAdj.add_node(chosen, **G_original.nodes[chosen]) # add the node to the recovering graph
+                        to_recover.remove(chosen)
+                        check = 1
+                        # restore chosen's edges (if the neighbors have been recovered)
+                        for neighbor in G_original.neighbors(chosen):
+                            if GAdj.has_node(neighbor):
+                                edge_data = G_original.get_edge_data(chosen, neighbor)
+                                GAdj.add_edge(chosen, neighbor, **edge_data)
+                
+                links.append(get_link_size(GAdj)/initialLinks) # get the interest parameters (normalized)
+                component.append(get_component_size(GAdj)/initialComponent)
+
+
+    while len(to_recover) > 0: # we want to recover all the nodes
+        if method == "random":
+            chosen = np.random.choice(to_recover)
+        elif method == "sequential":
+            chosen = to_recover[0]
+        check = 0
+        if np.random.rand() < p: # with probability p, we recover the node
+            GAdj.add_node(chosen, **G_original.nodes[chosen]) # add the node to the recovering graph
+            to_recover.remove(chosen)
+            check = 1
+
+            # restore chosen's edges (if the neighbors have been recovered)
+            for neighbor in G_original.neighbors(chosen):
+                if GAdj.has_node(neighbor):
+                    edge_data = G_original.get_edge_data(chosen, neighbor)
+                    GAdj.add_edge(chosen, neighbor, **edge_data)
+        if check == 1: # if we recovered a node, we save the links and component size
+            links.append(get_link_size(GAdj)/initialLinks) # get the interest parameters (normalized)
+            component.append(get_component_size(GAdj)/initialComponent)
+        else:
+            links.append(links[-1]) 
+            component.append(component[-1])
+
+
+    return component, links
+
+
