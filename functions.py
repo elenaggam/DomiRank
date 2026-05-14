@@ -478,7 +478,12 @@ def network_recovery(G_original, p, attackStrategy, method = "random"):
 
     return component, links
 
-def network_attack_recovery(G_original, p, attackStrategy, method = "random", sampling=0):
+def network_attack_recovery(G_original, p, attackStrategy, method = "random", sampling=0, centrality_func = None, ):
+    ''' 
+    attack and recover network
+    when not using domirank, centrality_func should be used if we want to update the attack strategy
+    stop_attack_time is the time step at which we stop the attack and only recover, if None, we keep attacking until all nodes are removed
+    '''
     # removed nodes in attack strategy!
 
     if type(G_original) != nx.classes.graph.Graph: #check if it is a networkx Graph
@@ -500,17 +505,34 @@ def network_attack_recovery(G_original, p, attackStrategy, method = "random", sa
     component = []
 
     to_recover = []
+    node_map = dict(zip(range(N), GAdj.nodes())) # map from 0,...,N-1 to the original node IDs
 
     for i in range(N-1):
         if i%sampling == 0:
             if i != 0: 
                 # attack process
-                attacked = attackStrategy[i-sampling:i] 
+                if centrality_func is not None:
+                    centr = centrality_func(GAdj)
+                    if isinstance(centr, dict):
+                        psi = list(centr.values())
+                    else:
+                        psi = centr
+                    attackStrategy = generate_attack(psi, node_map=node_map) # update attack strategy based on new centrality
+                    attacked = attackStrategy[:sampling]
+                    node_map = {k: v for k, v in node_map.items()
+                                if v not in attacked}
+                    node_map = relabel_dict(node_map) # relabel the node map keys to be from 0,...,len(node_map)-1 for the next iteration
+                    
+                else:
+                    attacked = attackStrategy[i-sampling:i] 
                 to_recover.extend(attacked) 
-                GAdj = remove_node(GAdj, attackStrategy[i-sampling:i]) 
+                GAdj = remove_node(GAdj, attacked) 
 
                 for s in range(sampling): # in each step we remove sampling nodes, thus we take sampling time steps
                     # recovery process
+                    if len(to_recover) == 0: # if there are no nodes to recover, we skip the recovery process
+                        break
+
                     if method == "sequential":
                         chosen = to_recover[0]
                     else : # random as default
@@ -531,22 +553,28 @@ def network_attack_recovery(G_original, p, attackStrategy, method = "random", sa
                 component.append(get_component_size(GAdj)/initialComponent)
 
 
-    while len(to_recover) > 0: # we want to recover all the nodes
-        if method == "random":
-            chosen = np.random.choice(to_recover)
-        elif method == "sequential":
-            chosen = to_recover[0]
-        check = 0
-        if np.random.rand() < p: # with probability p, we recover the node
-            GAdj.add_node(chosen, **G_original.nodes[chosen]) # add the node to the recovering graph
-            to_recover.remove(chosen)
-            check = 1
 
-            # restore chosen's edges (if the neighbors have been recovered)
-            for neighbor in G_original.neighbors(chosen):
-                if GAdj.has_node(neighbor):
-                    edge_data = G_original.get_edge_data(chosen, neighbor)
-                    GAdj.add_edge(chosen, neighbor, **edge_data)
+    while len(to_recover) > 0: # we want to recover all the nodes
+        
+        for s in range(sampling):
+            if len(to_recover) == 0: # if there are no nodes to recover, we skip the recovery process
+                break
+            if method == "random":
+                chosen = np.random.choice(to_recover)
+            elif method == "sequential":
+                chosen = to_recover[0]
+            check = 0
+            if np.random.rand() < p: # with probability p, we recover the node
+                GAdj.add_node(chosen, **G_original.nodes[chosen]) # add the node to the recovering graph
+                to_recover.remove(chosen)
+                check = 1
+
+                # restore chosen's edges (if the neighbors have been recovered)
+                for neighbor in G_original.neighbors(chosen):
+                    if GAdj.has_node(neighbor):
+                        edge_data = G_original.get_edge_data(chosen, neighbor)
+                        GAdj.add_edge(chosen, neighbor, **edge_data)
+        
         if check == 1: # if we recovered a node, we save the links and component size
             links.append(get_link_size(GAdj)/initialLinks) # get the interest parameters (normalized)
             component.append(get_component_size(GAdj)/initialComponent)
@@ -557,4 +585,21 @@ def network_attack_recovery(G_original, p, attackStrategy, method = "random", sa
 
     return component, links
 
+def collective_influence(G, l = 2):
+    '''Collective influence centrality measure'''
+    
+    CI = {}
+    for i in G.nodes():
+        neighbors = nx.single_source_shortest_path_length(G, i, cutoff=l).keys() # get the neighbors within l distance
+        CI[i] = (G.degree[i]-1) * sum(G.degree[j]-1 for j in neighbors if j != i) # calculate the collective influence centrality
+    return CI
 
+def relabel_dict(dict):
+    '''relabels the keys of dict to be the values of dict, where dict is a mapping from old keys to new keys.'''
+    new_key = 0
+    new_dict = {}
+    for key, value in dict.items():
+        new_dict[new_key] = value
+        new_key += 1
+    
+    return new_dict
