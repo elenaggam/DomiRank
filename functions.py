@@ -439,20 +439,46 @@ def average_attack(N, network_function, network_args, centrality_name, centralit
     return
 
 
-def recovery_step(to_recover, GAdj, method, p, G_original):
+def changing_attack(GAdj, attackStrategy=[], centrality_func = None, node_map = {}, sampling = 0, i = 0):
+    if centrality_func is not None:
+        centr = centrality_func(GAdj)
+        if isinstance(centr, dict):
+            psi = list(centr.values())
+        else:
+            psi = centr
+        attackStrategy = generate_attack(psi, node_map=node_map) # update attack strategy based on new centrality
+        attacked = attackStrategy[:sampling]
+        node_map = {k: v for k, v in node_map.items()
+                    if v not in attacked}
+        node_map = relabel_dict(node_map) # relabel the node map keys to be from 0,...,len(node_map)-1 for the next iteration
+        
+    elif len(attackStrategy) > 0:
+        attacked = attackStrategy[i-sampling:i] 
+    else:
+        raise ValueError("Attack strategy is empty, please provide an attack strategy or a centrality function to generate one.")
+    return attacked, node_map
+
+def choose_recovered_node(to_recover, method, p):
     '''
-    node recovery step
+    chooses the node to recover based on the method, either random or sequential.
     '''
     check = 0
     if method == "random":
         chosen = np.random.choice(to_recover)
     elif method == "sequential":
         chosen = to_recover[0]
-
     if np.random.rand() < p: # with probability p, we recover the node
+        check = 1
+    return chosen, check
+
+def recovery_step(to_recover, GAdj, method, p, G_original):
+    '''
+    node recovery step
+    '''
+    chosen, check = choose_recovered_node(to_recover, method, p)
+    if check == 1: # if we recover the node, we add it to the
         GAdj.add_node(chosen, **G_original.nodes[chosen]) # add the node to the recovering graph
         to_recover.remove(chosen)
-        check = 1
 
         # restore chosen's edges (if the neighbors have been recovered)
         for neighbor in G_original.neighbors(chosen):
@@ -523,20 +549,7 @@ def network_attack_recovery(G_original, p, attackStrategy, method = "random", sa
         if i%sampling == 0:
             if i != 0: 
                 # attack process
-                if centrality_func is not None:
-                    centr = centrality_func(GAdj)
-                    if isinstance(centr, dict):
-                        psi = list(centr.values())
-                    else:
-                        psi = centr
-                    attackStrategy = generate_attack(psi, node_map=node_map) # update attack strategy based on new centrality
-                    attacked = attackStrategy[:sampling]
-                    node_map = {k: v for k, v in node_map.items()
-                                if v not in attacked}
-                    node_map = relabel_dict(node_map) # relabel the node map keys to be from 0,...,len(node_map)-1 for the next iteration
-                    
-                else:
-                    attacked = attackStrategy[i-sampling:i] 
+                attacked, node_map = changing_attack(GAdj, attackStrategy=attackStrategy, centrality_func=centrality_func, node_map=node_map, sampling=sampling, i=i) 
                 to_recover.extend(attacked) 
                 GAdj = remove_node(GAdj, attacked) 
 
