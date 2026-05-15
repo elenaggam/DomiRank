@@ -17,14 +17,12 @@ def thetaDot(theta, G, omega):
     time derivative of the theta vector in the Kuramoto model, 
     given a graph G, coupling strength lam and natural frequencies omega
     '''
-    
-    if type(G) != nx.classes.graph.Graph: #check if it is a networkx Graph
-        GAdj = nx.to_scipy_sparse_array(G) #convert to scipy sparse if it is a graph 
-    else:
-        GAdj = G.copy()
     new_theta = np.zeros(len(theta))
     for i in range(len(theta)):
-        new_theta[i] = omega[i] + G.edge[i]['weight']*np.sum([np.sin(theta[j]-theta[i]) for j in GAdj.neighbors(i)])
+        for j, data in G[i].items():
+            w = data.get('weight', 0.0)
+            new_theta[i] += w*np.sin(theta[j] - theta[i])
+        new_theta[i] += omega[i]
     return new_theta
 
 def check_angles(theta):
@@ -38,41 +36,54 @@ def check_angles(theta):
         theta[i] = resto
     return theta
 
-def rk4(theta, G, lam, omega, dt):
+def rk4(theta, G, omega, dt):
     '''
     Runge-Kutta 4th order method for numerical integration of the Kuramoto model
     '''
     theta_values = list(theta.values())
-    k1 = thetaDot(theta_values, G, lam, omega)*dt
-    k2 = thetaDot(theta_values + 0.5*k1, G, lam, omega)*dt
-    k3 = thetaDot(theta_values + 0.5*k2, G, lam, omega)*dt
-    k4 = thetaDot(theta_values + k3, G, lam, omega)*dt
+    k1 = thetaDot(theta_values, G, omega)*dt
+    k2 = thetaDot(theta_values + 0.5*k1, G, omega)*dt
+    k3 = thetaDot(theta_values + 0.5*k2, G, omega)*dt
+    k4 = thetaDot(theta_values + k3, G, omega)*dt
 
     theta_values += (1/6.0)*(k1 + 2*k2 + 2*k3 + k4)
     #theta = check_angles(theta)
     
     return {i: theta_values[i] for i in range(len(theta_values))}
 
-def evolve_kuramoto(theta, G, lam, omega, dt, steps, epsilon = 1e-4, retrace=False):
+def evolve_kuramoto(theta, G, omega, dt, steps_base = 1000, epsilon = 1e-4, sampling = 0, retrace=False, break_on_convergence=True):
     '''
     Evolve the Kuramoto model for a given number of steps
     if retrace is true, it will retrace the steps backwards
     '''
     GAdj = G.copy()
 
+    if sampling == 0: # sample every 1% of the steps by default
+        sampling = int(steps_base/100)
+        if sampling == 0: # if the number of steps is too small, we sample every step
+            sampling = 1
+
+    steps = int(steps_base/dt)
     r = []
+    conv_iter = steps
     for _ in range(steps):
-        theta = rk4(theta, GAdj, lam, omega, dt)
-        r.append(order_parameter(theta))
-        if len(r) > 1 and np.linalg.norm(r[-1]-r[-2]) < epsilon: # if r converges, we stop the evolution
-            conv_iter = _
+        theta = rk4(theta, GAdj, omega, dt)
+        if _ % sampling == 0:
+            r.append(order_parameter(theta))
+            if len(r) > 1 and np.linalg.norm(r[-1]-r[-2]) < epsilon and conv_iter == steps: # if r converges, we stop the evolution
+                conv_iter = _
+                if break_on_convergence:
+                    break
         
     if retrace:
         for _ in range(steps):
-            theta = rk4(theta, GAdj, lam, omega, -dt)
-            r.append(order_parameter(theta))
-            if len(r) > 1 and np.linalg.norm(r[-1]-r[-2]) < epsilon: # if r converges, we stop the evolution
-                conv_iter = _
+            theta = rk4(theta, GAdj, omega, -dt)
+            if _ % sampling == 0:
+                r.append(order_parameter(theta))
+                if len(r) > 1 and np.linalg.norm(r[-1]-r[-2]) < epsilon and conv_iter == steps: # if r converges, we stop the evolution
+                    conv_iter = _
+                    if break_on_convergence:
+                        break
     return r, theta, conv_iter
 
 def initialize_random(N):
@@ -95,7 +106,7 @@ def change_edge_weight(G, node_list, weight):
 
     return G
 
-def kuramoto_recovery_step(to_recover, theta, GAdj, lam, omega, dt, steps, p, epsilon = 1e-4,sampling =0, method="random"):
+def kuramoto_recovery_step(to_recover, theta, GAdj, lam, omega, dt, steps, p, epsilon = 1e-4,sampling =0, sampling_kura =0,method="random"):
     '''
     given the list of nodes from G_original to recover, the current graph GAdj,
     we recover the nodes with probability p according to method,
@@ -113,16 +124,9 @@ def kuramoto_recovery_step(to_recover, theta, GAdj, lam, omega, dt, steps, p, ep
         chosen, check = f.choose_recovered_node(to_recover, method, p)
         if check == 1: # if we have chosen a node to recover, we recover it in the graph
             GAdj = change_edge_weight(GAdj, chosen, lam) 
-            
-            for j in range(steps):
-                # as the network has changed, we need to evolve the dynamics
-                theta = rk4(theta, GAdj, lam, omega, dt)
-                if j % sampling == 0: # save data every sampling steps
-                    r.append(order_parameter(theta))
-                    components.append(f.get_component_size(GAdj))
-                    links.append(f.get_link_size(GAdj))
-                    if len(r)>1 and np.linalg.norm(r[-1]-r[-2]) < epsilon: # if r converges, we move on
-                        break
+            r_more, _, _ = evolve_kuramoto(theta, GAdj, omega, dt, steps, epsilon, sampling = sampling_kura)
+            r.extend(r_more)
+
         elif len(r) > 0: # if we haven't chosen a node to recover, we keep the same graph and evolve the dynamics to see if it converges, but we don't save the data as we haven't recovered any node
             r.append(r[-1]) # if no nodes have been recovered, we keep the same order parameter 
             links.append(links[-1]) # we also keep the same number of links and component size
@@ -153,10 +157,10 @@ def kuramoto_recovery(to_recover, G_original, theta, GAdj, lam, omega, dt, steps
             sampling_kura = 1
 
     while len(to_recover) > 0: # we want to recover all the nodes
-        r, links, components = kuramoto_recovery_step(to_recover, theta, GAdj, lam, omega, dt, steps, p, epsilon, sampling, method)
+        r, links, components = kuramoto_recovery_step(to_recover, theta, GAdj, lam, omega, dt, steps, p, epsilon, sampling, sampling_kura, method)
     return r, links/initialLinks, components/initialComponent
 
-def kuramoto_attack(theta, G, lam, omega, dt, steps, attackStrategy = [], sampling =0, sampling_kura = 0, epsilon = 1e-5, centrality_func=None):
+def kuramoto_attack(theta, G, omega, dt, steps, attackStrategy = [], sampling =0, sampling_kura = 0, epsilon = 1e-5, centrality_func=None):
     '''
     attack the network and compute the order parameter, links and component size after each attack step, 
     until we have attacked all the nodes in attackStrategy.
@@ -185,19 +189,16 @@ def kuramoto_attack(theta, G, lam, omega, dt, steps, attackStrategy = [], sampli
     for i in range(N-1):
         # we evolve the Kuramoto model after each attack to see the effect on the order parameter and sinchronization
         if i%sampling == 0: # we also want to save the original state
-            for j in range(steps): # kurmaoto dynamics evolution
-                theta = rk4(theta, GAdj, lam, omega, dt)
-                if j % sampling_kura == 0: # save data every sampling steps
-                    r.append(order_parameter(theta))
-                    links.append(f.get_link_size(GAdj)/initialLinks)
-                    components.append(f.get_component_size(GAdj)/initialComponent)
-                    runtime += 1
-                if len(r) > 1 and np.linalg.norm(r[-1]-r[-2]) < epsilon: # if r converges, we move on
-                    break
+            r_more, _, _ = evolve_kuramoto(theta, GAdj, omega, dt, steps, epsilon, sampling_kura)
+            r.extend(r_more)    
+  
             # once the system has evolved, we attack the network by removing the coupling strength
             if i != 0:
                 attacked, node_map = f.changing_attack(GAdj, attackStrategy=attackStrategy, centrality_func=centrality_func, node_map=node_map, sampling=sampling, i=i) 
                 GAdj = change_edge_weight(GAdj, attacked, 0)
+            links.append(f.get_link_size(GAdj)/initialLinks)
+            components.append(f.get_component_size(GAdj)/initialComponent)
+
                   
     
     return r, links, components
@@ -236,7 +237,7 @@ def kuramoto_attack_recovery(theta, G, lam, omega, dt, steps, p,attackStrategy =
     for i in range(N-1):
         # we evolve the Kuramoto model after each attack to see the effect on the order parameter and sinchronization
         if i%sampling == 0: # we also want to save the original state
-            r_aux, links_aux, components_aux = kuramoto_recovery_step(to_recover, theta, GAdj, lam, omega, dt, steps, p, epsilon, sampling, method)
+            r_aux, links_aux, components_aux = kuramoto_recovery_step(to_recover, theta, GAdj, lam, omega, dt, steps, p, epsilon, sampling, sampling_kura, method)
             r.extend(r_aux)
             links_aux = [links_aux[k]/initialLinks for k in range(len(links_aux))]
             components_aux = [components_aux[k]/initialComponent for k in range(len(components_aux))]

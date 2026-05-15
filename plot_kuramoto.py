@@ -12,19 +12,23 @@ net_name = 'ER'
 dt = 0.1
 N = 100
 steps = 1000
-avg = 10
+avg = 2
 
+interval = 400
 
-for k in [4, 6, 8, 10, 20]:
+for k in [4, 6, 10, 20]:
     r_points = []
-    for lam in [0.1, 0.5, 0.7, 1., 2.]:
-        x_axis = np.linspace(0, 1, steps)
-        base_out = f'results_kuramoto/{net_name}_k{k}/dt{-np.log10(dt):.0f}_steps{steps}_avg{avg}/'
-        r = np.loadtxt(f'{base_out}evolution_lam{lam:.1f}_results.txt')
-        plt.plot(x_axis, r, label = f"λ={lam:.1f}", linewidth=2)
-    plt.xlabel("time")
-    plt.ylabel("Order parameter r")
-    plt.title(f"<k>={k}")
-    plt.legend()
-    plt.savefig(f'results_kuramoto/{net_name}_k{k}/dt{int(-np.log10(dt))}_steps{steps}_avg{avg}/evolution_r.png', dpi=300)
-    plt.close()
+    r_error = []
+    x_axis = np.arange(0.1, 1.6, 0.1)
+    for lam in np.arange(0.1, 1.6, 0.1):
+        base_out = f'results_kuramoto/{net_name}_{N}/k{k}_dt{-np.log10(dt):.0f}_steps{steps}_avg{avg}/evolution/'
+        r = np.loadtxt(f'{base_out}{lam:.1f}_results.txt')
+        r_points.append(np.mean(r[interval:])) # we only plot the second half of the evolution to better see the convergence
+        r_error.append(np.std(r[interval:])) # we also plot the standard deviation to show the fluctuations
+    plt.errorbar(x_axis, r_points, yerr=r_error, label = f"<k>={k}", marker='o',   linewidth=2)
+plt.xlabel("λ")
+plt.ylabel("Order parameter r")
+plt.title(f"ER (N={N})")
+plt.legend()
+plt.savefig(f'results_kuramoto/{net_name}_{N}/evolution_r.png', dpi=300)
+plt.close()
