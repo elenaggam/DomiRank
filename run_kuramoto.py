@@ -34,34 +34,40 @@ sigma = -0.99/eig #high sigma as convergence might be tricky
 psi = f.domirank(G, sigma=sigma)
 attack = f.generate_attack(psi)
 
-avg = 10
+avg_ = [2, 6]
 
 
 
 do = 'evolution'
 
 
-avg=2
-def run_kuramoto(dt):
+def run_kuramoto(dt, k_list, avg_, list_lambdas=np.flip(np.arange(0.1, 1.6, 0.1))):
     steps = 1000
     
     print(f'dt={dt} starting')
-    for k in [4, 6,  10, 20]:
+    for k in k_list:
         p2 = k/(N-1)
         G = nx.erdos_renyi_graph(N, p2, seed=42)
         G = f.relabel_nodes(G)
         
         print(f'k={k} starting')
     
-        for lam in np.flip(np.arange(0.1, 1.6, 0.1)):
+        for lam in list_lambdas:
             nx.set_edge_attributes(G, lam, 'weight')
             conv_iter = 0
             t_init = time.time()
+            if k<=6:
+                avg = avg_[1]
+            else:
+                avg = avg_[0]
             r_total = 0
             base_out = f'results_kuramoto/{net_name}_{N}/k{k}_dt{-np.log10(dt):.0f}_steps{steps}_avg{avg}/{do}/'
             if not os.path.exists(base_out):
                 os.makedirs(base_out)
-            
+            out = base_out + f'{lam:.1f}'
+            if os.path.isfile(out + '_results.txt'):
+                print(f'lambda={lam:.1f} already done, skipping')
+                continue
             # average over different initial conditions to remove fluctuations
             for _ in range(avg):
                 theta = fk.initialize_random(N)
@@ -78,7 +84,7 @@ def run_kuramoto(dt):
             r_total /= avg
             conv_step = conv_iter/avg
             
-            out = base_out + f'{lam:.1f}'
+            
 
             # plotting the evolution of r
             
@@ -93,7 +99,9 @@ def run_kuramoto(dt):
 
 
     
-    
-for dt in [0.1, 0.01]:
-    run_kuramoto(dt)
+Parallel(n_jobs=2)([
+    delayed(run_kuramoto)(0.01, [20], [2, 8], list_lambdas=np.flip(np.arange(0.8, 0.9, 0.1))),
+    delayed(run_kuramoto)(0.01, [20], [2, 8], list_lambdas=np.flip(np.arange(0.9, 1.0, 0.1))),
+]
+)    
     
