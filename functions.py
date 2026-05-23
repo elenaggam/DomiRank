@@ -225,7 +225,7 @@ def network_attack_sampled(G, attackStrategy, sampling = 0):
 # optimal sigma
 
 def process_iteration(q, i, sigma, spArray, maxIter, checkStep, dt, epsilon, sampling):
-    tf, domiDist = domirank(spArray, sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
+    domiDist = domirank(spArray, sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
     domiAttack = generate_attack(domiDist)
     ourTempAttack, __ = network_attack_sampled(spArray, domiAttack, sampling = sampling)
     finalErrors = ourTempAttack.sum()

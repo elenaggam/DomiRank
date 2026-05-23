@@ -1,5 +1,3 @@
-from os import path
-
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,13 +7,15 @@ import functions as f
 from scipy.sparse.linalg import eigsh
 import functions_kuramoto as fk
 import functions as f
+from matplotlib.colors import LogNorm
 
-net_name = 'BA'
+net_name = 'ER'
 dt = 0.1
 N = 100
 steps = 100
-avg_ = [8, 2]
-
+avg_ = [10, 10]
+k = 6
+do = 'attack'
 interval = 500
 
 
@@ -44,26 +44,34 @@ def plot_kuramoto_evolution():
         plt.savefig(f'results_kuramoto/{net_name}_{N}/dt{-np.log10(dt):.0f}_evolution_r.png', dpi=300)
         plt.close()
 
+area = []
+lams = np.flip(np.arange(0.1, 2.1, 0.05))
+sigmas = np.arange(0.01, 1, 0.03)
+r_tot = []
 
-for l in [1.5]:
-    r = np.loadtxt(f'results_kuramoto/BA_20_k20/dt2_steps100_avg1/recover/domirank_{l:.1f}_r_evolution.txt')
-    plt.plot(r, label = f"λ={l:.1f}")
-    
-plt.xlabel("Time step")
-plt.ylabel("Order parameter r")
-plt.legend(loc = 'upper left', bbox_to_anchor=(1, 1))
-plt.savefig(f'results_kuramoto/BA_20_k20/dt2_steps100_avg1/recover/domirank_r_evolution.png', dpi=300, bbox_inches='tight')
-plt.close()
-base = 'results_kuramoto/BA_20_k20/dt2_steps100_avg1/recover/domirank_areas.txt'
-plt.plot(np.loadtxt(base)[:,0], np.loadtxt(base)[:,1], marker='o')
-plt.savefig('results_kuramoto/BA_20_k20/dt2_steps100_avg1/recover/domirank_area.png', dpi=300, bbox_inches='tight')
+for sigma in [0.16, 0.97]:
+    a = np.loadtxt(f'results_kuramoto/{net_name}_{N}_k{k}/dt1_steps100_avg15_{do}/domirank_s{sigma:.2f}/areas.txt', usecols=(1,))
+    area.append(np.flip(a))
+
+plt.plot(lams, area[0], label=f'sigma={0.16:.2f}', marker='o')
+plt.plot(lams, area[1], label=f'sigma={0.97:.2f}', marker='o')
+plt.xlabel("λ")
+plt.ylabel("Area")
+plt.title(f"{net_name} (N={N})")
+plt.legend()
+plt.savefig(f'results_kuramoto/{net_name}_{N}_k{k}_area_{do}.png', dpi=300)
 plt.close()
 
-l = 1.5
-r = np.loadtxt(f'results_kuramoto/BA_20_k20/dt2_steps100_avg1/recover/domirank_{l:.1f}_results.txt')
-plt.plot(np.linspace(0, 1, len(r)) ,r, label = f"λ={l:.1f}")
-plt.xlabel("removed nodes")
-plt.ylabel("Order parameter r")
-plt.title(f"{net_name} (N={N}) λ={l:.1f}")
-plt.savefig(f'results_kuramoto/BA_20_k20/dt2_steps100_avg1/recover/domirank_r_removed_nodes.png', dpi=300, bbox_inches='tight')
+areas_2d = np.array(area)
+
+plt.figure(figsize=(10, 6))
+plt.imshow(areas_2d, aspect='auto', origin='lower', extent=[lams.min(), lams.max(), sigmas.min(), sigmas.max()], cmap='viridis')
+plt.colorbar(label='Area')
+plt.xlabel('λ')
+plt.ylabel('σ')
+plt.title(f'Heatmap - {net_name} (N={N})')
+plt.savefig(f'results_kuramoto/{net_name}_{N}_k{k}_heatmap_areas_{do}.png', dpi=300, bbox_inches='tight')
 plt.close()
+
+
+plt.plot
