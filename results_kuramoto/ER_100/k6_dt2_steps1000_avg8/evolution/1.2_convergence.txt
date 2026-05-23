@@ -1,3 +1,0 @@
-runtime (s)		3109
-final r_err		0.00082
-Convergence time		8.59

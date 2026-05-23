@@ -1,3 +1,0 @@
-runtime (s)		2021
-final r_err		0.00252
-Convergence time		26.25
