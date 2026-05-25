@@ -112,7 +112,7 @@ def run_lambda(G, N, lam, dt, steps, avg, attackStrategy, do, p, sampling, sampl
 
     return r_all, r_stable_all, areas_all, areas_stable
 
-def attack_or_recover(task_id, name, N, k, sigma, eig, strategy_name, do = 'attack', p =0.25, dt = 0.1, steps = 100, avg = 10, list_lambdas=[0.2, 1.], sampling = 0, sampling_kura = 0, centrality_func = None, recovery_method = 'sequential'):
+def attack_or_recover(task_id, name, N, k, sigma, eig, strategy_name, do = 'attack', p =0.25, dt = 0.1, steps = 100, avg = 10, list_lambdas=np.arange(0.05, 1.1, 0.05), sampling = 0, sampling_kura = 0, centrality_func = None, recovery_method = 'sequential'):
     print("ENTER TASK", task_id, os.getpid())
 
     G, eig = make_graph(name, N, k)
@@ -171,7 +171,6 @@ def make_task(name, mode, N, k, sigma, eig, p, avg):
         avg=avg,
         sampling=1,
         sampling_kura=1,
-        recovery_method='random'
     )
 
 
@@ -181,7 +180,7 @@ if __name__ == "__main__":
     N = 100
     p = 0.25
     k = 6
-    avg = 11
+    avg = 10
 
     G_ba, eig_ba = make_graph('BA', N, k)
     G_er, eig_er = make_graph('ER', N, k)
@@ -190,16 +189,16 @@ if __name__ == "__main__":
     "BA": (G_ba, eig_ba)
     }
     
-    #sigma_list = np.arange(0.03, 1.02, 0.03)
-    sigma_list_og = [0.21, 0.99]
+    sigma_list = np.arange(0.03, 1.02, 0.03)
+
     tasks = []
     
     for name in ["ER", "BA"]:
         optimal, _ =f.old_optimal_sigma(nx.to_scipy_sparse_array(graphs[name][0]), graphs[name][1])
-        sigma_list = sigma_list_og + [-optimal*graphs[name][1]]
+        #sigma_list = sigma_list_og + [-optimal*graphs[name][1]]
         for sigma in sigma_list:
                 eig = graphs[name][1]
-                #tasks.append(make_task(name, "attack", N, k, -sigma/eig, eig, p, avg=avg))
+                tasks.append(make_task(name, "attack", N, k, -sigma/eig, eig, p, avg=avg))
                 tasks.append(make_task(name, "recover", N, k, -sigma/eig, eig, p, avg))
     
-    Parallel(n_jobs=10, backend="loky")(tasks)
+    Parallel(n_jobs=6, backend="loky")(tasks)
