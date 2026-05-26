@@ -8,6 +8,7 @@ from scipy.sparse.linalg import eigsh
 import hypernetx as hnx
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
+import functions as f
 
 
 def dict_to_matrix(datos_dict):
@@ -32,6 +33,7 @@ def domirank(H_matrix, alpha, theta, eta1, eta2, dt = 0.1, epsilon = 1e-5, maxIt
     
     # H_matrix = H.incidence_matrix().tocsr() # shape = (N, E)
     N, E = H_matrix.shape
+    H_matrix_copy = H_matrix.copy()
     
     # hyperedge cardinality list
     e_list = np.array(H_matrix.sum(axis=0)).flatten() # sum along the node axis -> list of cardinalities, shape = (E,)
@@ -39,22 +41,33 @@ def domirank(H_matrix, alpha, theta, eta1, eta2, dt = 0.1, epsilon = 1e-5, maxIt
     thetas = func(theta, eta2, e_list) 
 
     psi = np.zeros(N)
-    boundary = epsilon*N*dt
+    boundary = epsilon*N
 
     for i in range(maxIter):
         tempVal = np.zeros(N)
+        edge_contributions = np.zeros(E)
+        auto_contributions = np.zeros(N)
 
-        for node in range(N): # iterate over nodes
-            edges = np.where(H_matrix[node, :] == 1)[0] # get edges containing the node
-            for j in edges: # iterate over edges containing the node
-                alpha_e = alphas[j]
-                theta_e = thetas[j]
-                tempVal[node] += alpha_e * H_matrix[node, j] * (theta_e - psi[node]) - psi[node]
-            
+        for edges in range(E): # iterate over edges
+            alpha_e = alphas[edges]
+            theta_e = thetas[edges]
+            # scalar product of the edge contribution to each node in the edge
+            # if a node does not belong to the edge, its contribution is zero as H_matrix[:, edges]=0 for that node
+            edge_contributions[edges] = alpha_e * (theta_e - H_matrix_copy[:, edges].T@ psi)
+            for node in range(len(H_matrix_copy[:, edges])): # iterate over nodes in the edge
+                auto_contributions[node] += alpha_e*psi[node]*H_matrix_copy[node, edges]
+            # OLD
+            # edge_contributions[edges] = alpha_e * H_matrix_copy[:, edges].T@(theta_e - psi)
+            # for node in range(len(H_matrix_copy[:, edges])): # iterate over nodes in the edge
+            #     auto_contributions[node] += alpha_e*(theta_e-psi[node])*H_matrix_copy[node, edges]
+
+        tempVal = H_matrix_copy @ edge_contributions - auto_contributions # shape = (N,)
+        tempVal -= psi
         psi += tempVal.real*dt
+
         if i% checkStep == 0:
             if np.abs(tempVal).sum() < boundary:
-                # print(f"Converged at iteration {i}")
+                print(f"Converged at iteration {i}")
                 # conv_iter = i
                 break
 
@@ -70,6 +83,7 @@ def plotting_psi(H, psi, node_names, title):
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
+    
     hnx.draw(H, ax=ax, nodes_kwargs={"facecolors": node_colors})
 
     sm = cm.ScalarMappable(norm=norm, cmap=cmap)
@@ -77,30 +91,39 @@ def plotting_psi(H, psi, node_names, title):
 
     plt.colorbar(sm, ax=ax, label="psi", shrink=0.5 )
     plt.title(title)
-    plt.show()
+    return fig, ax
 
-datos = {
-    1: ['A','B', 'C', 'D', 'E'],
-    2: ['F', 'D'],
-    3: ['F', 'G'],
-    4: ['A','H', 'I'],
-    5: ['J', 'I'],
-    6: ['K', 'L', 'J', 'B']
-}
+def prueba_step(H, matriz, nombres_nodos, alpha, theta, eta1, eta2):
 
-matriz, nombres_nodos, nombres_aristas = dict_to_matrix(datos)
+    psi = domirank(matriz, alpha, theta, eta1, eta2)
+    title = f"α={alpha}(e-1)$^{{{eta1}}}$, θ={theta}(e-1)$^{{{eta2}}}$"
+    plotting_psi(H, psi, nombres_nodos, title)
 
-H = hnx.Hypergraph.from_numpy_array(
-    matriz, 
-    node_names=nombres_nodos, 
-    edge_names=nombres_aristas
-)
+def attacks(H, H_matrix, attackStrategy, node_names, edge_names, psi, plot_to = 5):
+    H_matrix_copy = H_matrix.copy()
+    node_names_copy = node_names.copy()
+    edge_names_copy = edge_names.copy()
 
-alpha = 0.5
-theta = 0.5
-eta1 = 1
-eta2 = 3
-psi = domirank(matriz, alpha, theta, eta1, eta2)
-title = f"α={alpha:.1f}(e-1)$^{{{eta1}}}$, θ={theta:.1f}(e-1)$^{{{eta2}}}$"
-plotting_psi(H, psi, nombres_nodos, title)
-plt.savefig("hyperdomirank2_plot.png", dpi=300, bbox_inches='tight')
+
+    for i in range(len(attackStrategy)-1):
+        removed_node = attackStrategy[i]
+        removed_node_index = np.where(np.array(node_names_copy) == removed_node)[0][0] # find the index of the node to remove
+        node_names_copy.pop(removed_node_index) # remove the node from the node names list
+        H_matrix_copy = np.delete(H_matrix_copy, removed_node_index, axis=0) # remove the node from the incidence matrix
+        
+        # remove_col = []
+        # for j in range(H_matrix_copy.shape[1]):
+        #     if H_matrix_copy[:,j].sum() == 0: # if the edge has no nodes left, remove it
+        #         print(f"Removing edge {H.edges[j]} as it has no nodes left at iteration {i}")
+        #         remove_col.append(j)
+        # H_matrix_copy = np.delete(H_matrix_copy, remove_col, axis=1) # remove the empty edges from the incidence matrix
+        # edge_names_copy = np.delete(edge_names_copy, remove_col)
+
+        H_copy = hnx.Hypergraph.from_numpy_array(
+            H_matrix_copy,
+            node_names=node_names_copy,
+            edge_names=edge_names_copy      )
+        if i<= plot_to:
+            plotting_psi(H_copy, psi, node_names_copy, title=f"After removing node {attackStrategy[i]}")
+
+    return
