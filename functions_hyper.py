@@ -73,7 +73,7 @@ def domirank(H_matrix, alpha, theta, eta1, eta2, dt = 0.1, epsilon = 1e-5, maxIt
 
     return psi
 
-def plotting_psi(H, psi, node_names, title):
+def plotting_psi(H, psi, node_names, title, layout='some', pos=None):
     psi_dict = dict(zip(node_names, psi/np.max(psi)))
     psi_ordered = [psi_dict[n] for n in H.nodes]
 
@@ -81,28 +81,41 @@ def plotting_psi(H, psi, node_names, title):
     cmap = cm.cividis
     node_colors = [cmap(norm(v)) for v in psi_ordered]
 
+    G = H.bipartite()
+    if pos is None:
+        if layout == 'circular':
+            pos = nx.circular_layout(G)
+        else :
+            pos = nx.spring_layout(G, seed=42) 
+
     fig, ax = plt.subplots(figsize=(8, 6))
 
     
-    hnx.draw(H, ax=ax, nodes_kwargs={"facecolors": node_colors})
+    hnx.draw(H, ax=ax, pos=pos, nodes_kwargs={"facecolors": node_colors})
 
     sm = cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
 
-    plt.colorbar(sm, ax=ax, label="psi", shrink=0.5 )
+    # plt.colorbar(sm, ax=ax, label="psi", shrink=0.5 )
     plt.title(title)
     return fig, ax
 
-def prueba_step(H, matriz, nombres_nodos, alpha, theta, eta1, eta2):
+def prueba_step(H, matriz, nombres_nodos, alpha, theta, eta1, eta2, layout='some'):
 
     psi = domirank(matriz, alpha, theta, eta1, eta2)
     title = f"α={alpha}(e-1)$^{{{eta1}}}$, θ={theta}(e-1)$^{{{eta2}}}$"
-    plotting_psi(H, psi, nombres_nodos, title)
+    plotting_psi(H, psi, nombres_nodos, title, layout=layout)
 
-def attacks(H, H_matrix, attackStrategy, node_names, edge_names, psi, plot_to = 5):
+def attacks(H, H_matrix, attackStrategy, node_names, edge_names, psi, plot_to = 5, layout='some'):
     H_matrix_copy = H_matrix.copy()
     node_names_copy = node_names.copy()
     edge_names_copy = edge_names.copy()
+
+    G = H.bipartite()
+    if layout == 'circular':
+            pos = nx.circular_layout(G)
+    else :
+        pos = nx.spring_layout(G, seed=42) 
 
 
     for i in range(len(attackStrategy)-1):
@@ -124,6 +137,6 @@ def attacks(H, H_matrix, attackStrategy, node_names, edge_names, psi, plot_to = 
             node_names=node_names_copy,
             edge_names=edge_names_copy      )
         if i<= plot_to:
-            plotting_psi(H_copy, psi, node_names_copy, title=f"After removing node {attackStrategy[i]}")
+            plotting_psi(H_copy, psi, node_names_copy, title=f"After removing node {attackStrategy[i]}", layout=layout, pos=pos)
 
     return
