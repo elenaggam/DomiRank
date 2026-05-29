@@ -151,6 +151,9 @@ def get_component_size(G, strong = False):
         raise TypeError('You must input a networkx.Graph Data-Type or scipy.sparse.csr array')
 
 def get_largest_component(G, strong = False):
+    '''
+    calculates the largest component of a graph, either from scipy.sparse or from networkX.Graph datatype.
+    '''
     if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
         if nx.is_directed(G) and strong == False:
             GMask = max(nx.weakly_connected_components(G), key = len)
@@ -164,6 +167,9 @@ def get_largest_component(G, strong = False):
         raise TypeError('You must input a networkx.Graph Data-Type')
 
 def get_link_size(G):
+    '''
+    calculates the number of links in a graph, either from scipy.sparse or from networkX.Graph datatype.
+    '''
     if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
         links = G.number_of_edges() #convert to scipy sparse if it is a graph 
     elif type(G) == scipy.sparse.csr_array:
@@ -296,33 +302,11 @@ def old_optimal_sigma(spArray, endVal = 0, startval = 0.000001, iterationNo = 10
 
     return minEig, finalErrors # sigma and areas
 
-def old2_optimal_sigma(G, delta_sigma = 0.001, sampling = 0, dt = 0.1, epsilon = 1e-5, maxIter = 10000, checkStep = 10):
-    
-    if type(G) == nx.classes.graph.Graph: #check if it is a networkx Graph
-        GAdj = nx.to_scipy_sparse_array(G).astype(float) #convert to scipy sparse if it is a graph 
-    else:
-        GAdj = G.copy()
-    
-    eig = eigsh(GAdj, return_eigenvectors=False) # get the largest eigenvalue of the adjacency matrix
-    sigma_max = -1.0/np.min(eig)
-    sigma_range = np.arange(0.001, sigma_max, delta_sigma) 
-
-    lcc_list = []
-
-    for sigma in sigma_range:
-        Psi = domirank(GAdj, sigma = sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
-        attack = generate_attack(Psi)
-        lcc, _ = network_attack_sampled(GAdj, attack, sampling = sampling) # get the lcc after attacking with the generated attack strategy
-        area_lcc = np.sum(lcc)
-        lcc_list.append(area_lcc)
-    
-    optimal_sigma = sigma_range[np.argmin(lcc_list)]
-    
-    return optimal_sigma, lcc_list
-
 
 def network_attack_plotting_step(G, attackStrategy, p, psi, title, ax):
-    
+    '''
+    function to plot the network as it is being attacked, just for one fraction of removed nodes p
+    '''
     GAdj = G.copy()
     nx.set_node_attributes(GAdj, dict(enumerate(psi)), 'centr') # set the domirank as a node attribute for plotting purposes
 
@@ -373,73 +357,10 @@ def network_attack_plotting(G, attackStrategy, p_values, centrality, titles, dir
 
     return
 
-
-def average_domi_attack(N, network_function, network_args, base = "results/", avgN = 20, startval = 0.000001, iterationNo = 100, dt = 0.1, epsilon = 1e-5, maxIter = 100, checkStep = 10, maxDepth = 100, sampling = 0):
-    
-    lcc_values = np.zeros(int(N/sampling)) # initialize lcc values for averaging
-    links_values = np.zeros(int(N/sampling)) # initialize links values for averaging
-    
-    file = open(f"{base}sigma.txt", "w")
-    avg_eig = 0
-    avg_sigma = 0
-
-    for j in range(avgN):
-        G = network_function(**network_args)
-        G = relabel_nodes(G) 
-        sparse_G = nx.to_scipy_sparse_array(G)
-        eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float), k=1,which='SA')
-        eig = np.min(eigenvalues)
-
-        sigma, _ = old_optimal_sigma(sparse_G, endVal = eig, sampling = sampling, iterationNo=iterationNo, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep, maxDepth = maxDepth)
-        psi = domirank(sparse_G, sigma, dt = dt, epsilon = epsilon, maxIter = maxIter, checkStep = checkStep)
-        attack = generate_attack(psi)
-        lcc, links = network_attack_sampled(G, attack, sampling = sampling)
-
-        file.write(f"{sigma:.4f}\t{eig:.4f}\n")
-        avg_sigma += sigma
-        avg_eig += eig
-        lcc_values += np.array(lcc)
-        links_values += np.array(links)
-
-        del G, sparse_G, psi, lcc, links # free memory
-
-    file.write(f"\n{avg_sigma/avgN:.4f}\t{avg_eig/avgN:.4f}\n")
-    file.close()
-
-    lcc_values /= float(avgN)
-    links_values /= float(avgN)
-
-    np.savetxt(f"{base}Domirank_averaged_lcc_links.txt", np.array([lcc_values, links_values]).T, fmt = "%.4f") # save the lcc and links values for the attack
-    
-    return
-
-def average_attack(N, network_function, network_args, centrality_name, centrality_func, base = "results/", avgN = 20, sampling = 0):
-    
-    lcc_values = np.zeros(int(N/sampling)) # initialize lcc values for averaging
-    links_values = np.zeros(int(N/sampling)) # initialize links values for averaging
-
-    for j in range(avgN):
-        G = network_function(**network_args)
-        G = relabel_nodes(G) 
-
-        centrality = centrality_func(G)
-        if isinstance(centrality, dict):
-            centrality = np.array(list(centrality.keys()))
-        
-        lcc, links = network_attack_sampled(G, centrality, sampling = sampling)
-
-        lcc_values += np.array(lcc)
-        links_values += np.array(links)
-
-    lcc_values /= float(avgN)
-    links_values /= float(avgN)
-
-    np.savetxt(f"{base}{centrality_name}_averaged_lcc_links.txt", np.array([lcc_values, links_values]).T, fmt = "%.4f") # save the lcc and links values for the attack
-    
-    return
-
-
 def changing_attack(GAdj, attackStrategy=[], centrality_func = None, node_map = {}, sampling = 0, i = 0):
+    '''
+    As the network is being attacked, this function recomputes the centrality measure at that point
+    '''
     if centrality_func is not None:
         centr = centrality_func(GAdj)
         if isinstance(centr, dict):
@@ -473,7 +394,7 @@ def choose_recovered_node(to_recover, method, p):
 
 def recovery_step(to_recover, GAdj, method, p, G_original):
     '''
-    node recovery step
+    node recovery step: choosing the node to recover based on the method, and recovering it with probability p.
     '''
     chosen, check = choose_recovered_node(to_recover, method, p)
     if check == 1: # if we recover the node, we add it to the

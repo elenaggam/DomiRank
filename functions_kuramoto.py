@@ -12,6 +12,9 @@ def order_parameter(theta):
     return np.abs(np.mean(np.exp(1j * theta)))
 
 def thetaDot(theta, rows, cols, w, omega):
+    '''
+    kuramoto equation: dtheta_i/dt = omega_i + sum_j A_ij * sin(theta_j - theta_i)
+    '''
     diff = theta[cols] - theta[rows]
     interaction = w * np.sin(diff)
 

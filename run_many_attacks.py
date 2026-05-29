@@ -8,20 +8,20 @@ from scipy.sparse.linalg import eigsh
 
 N = 1000
 
-centrality_titles = ['Domirank', 'Katz', 'Betweenness', 'Degree', 'Harmonic', 'Closeness', 'Eigenvector', 'Load', 'PageRank', 'Current-flow']
+centrality_titles = ['DomiRank', 'Katz', 'Betweenness', 'Degree', 'Harmonic', 'Closeness', 'Eigenvector', 'Load', 'PageRank', 'Current-flow']
 centrality_func = [f.domirank, nx.katz_centrality_numpy, nx.betweenness_centrality, nx.degree_centrality, nx.harmonic_centrality, nx.closeness_centrality, nx.eigenvector_centrality_numpy, nx.load_centrality, nx.pagerank]
 
 # network_titles = ['WS', 'ER (high degree)', 'ER (low degree)', 'BA', 'RGG']
 # network_functions = [nx.watts_strogatz_graph, nx.erdos_renyi_graph, nx.erdos_renyi_graph, nx.barabasi_albert_graph, nx.random_geometric_graph]
 # network_args = [dict(n=N, k=4, p=0.12), dict(n=N, p=20.0/(N-1.0)),  dict(n=N, p=6.0/(N-1.0)), dict(n=N, m=3), dict(n=N, radius=np.sqrt(16/(np.pi*N)))]
 
-network_titles = ['connected WS']
-network_functions = [nx.connected_watts_strogatz_graph]
-network_args = [dict(n=N, k=4, p=0.12)]
+network_titles = ['ER (low degree)', 'BA']
+network_functions = [nx.erdos_renyi_graph, nx.barabasi_albert_graph]
+network_args = [dict(n=N, p=7.0/(N)), dict(n=N, m=3)]
 
 # graph 
 avgN = 1
-sampling = 50
+sampling = 20
 
 time_file = open(f"{N}_time.txt", "w")
 
@@ -56,7 +56,7 @@ for i in range(len(network_functions)):
     psi = f.domirank(G, sigma=sigma) #compute the centrality measures
     attack = f.generate_attack(psi)
     lcc, links = f.network_attack_sampled(G, attack, sampling = sampling)
-    plt.plot(np.linspace(0, 1, len(lcc)), lcc, label = "Domirank", color = "b", linestyle='dotted', linewidth=3, zorder=10)
+    plt.plot(np.linspace(0, 1, len(lcc)), lcc, label = "DomiRank", color = "b", linestyle='dotted', linewidth=3, zorder=10)
     print(f"Domirank attack completed")
 
     for j in range(1, len(centrality_func)-1):
@@ -71,10 +71,12 @@ for i in range(len(network_functions)):
     time_file.write(f"{network_titles[i]}: {end_time - start_time:.2f} seconds\n")
 
     plt.title(f"{network_titles[i]} σ={sigma*eig:.3f}/λ", fontsize=14)
-    plt.legend(fontsize=12, loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.xlabel("removed fraction, p", fontsize = 12)
-    plt.ylabel("Largest Connected Component", fontsize = 12)
-    plt.savefig(base + "lcc.png", dpi=300, bbox_inches='tight')
+    plt.legend(fontsize=14, loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.xlabel("p", fontsize = 14)
+    plt.ylabel("LCC", fontsize = 14)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.savefig(base + "lcc!!!.png", dpi=300, bbox_inches='tight')
     print(f"Plot saved for {network_titles[i]}")
     plt.close()
 

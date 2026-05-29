@@ -14,34 +14,34 @@ titles = ['Domirank', 'Betweenness', 'Closeness', 'PageRank']
 # graph 
 N = 25
 avg_sigma = 0
-avgN = 10
+avgN = 1
 avg_eig = 0
-file = open(f"BA_avg{avgN}.txt", "w")
-for i in range(avgN):
-    G = nx.barabasi_albert_graph(N, 1) # create the graph
-    sparse_G = nx.to_scipy_sparse_array(G)
-    G = f.relabel_nodes(G) # relabel the nodes to be from 0 to N-1 instead of tuples
-    eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float))
-    eig = np.min(eigenvalues) # lambda_N
+# file = open(f"BA_avg{avgN}.txt", "w")
 
-    # optimal sigma
-    sigma, _ = f.old_optimal_sigma(sparse_G, endVal = eig, sampling = 1, iterationNo=1000) # compute the optimal sigma for the graph
-    file.write(f"{sigma:.4f}\t{-sigma*eig:.4f}\n")
-    avg_sigma += sigma
-    avg_eig += eig
-
-avg_sigma /= avgN
-avg_eig /= avgN
-file.close()
-G = nx.barabasi_albert_graph(N, 1, seed=82) # create the graph
+G = nx.grid_2d_graph(7, 7) # create the graph
 sparse_G = nx.to_scipy_sparse_array(G)
 G = f.relabel_nodes(G) # relabel the nodes to be from 0 to N-1 instead of tuples
+eigenvalues, _ = eigsh(nx.to_scipy_sparse_array(G).astype(float))
+eig = np.min(eigenvalues) # lambda_N
+
+# optimal sigma
+# sigma, _ = f.old_optimal_sigma(sparse_G, endVal = eig, sampling = 1, iterationNo=1000) # compute the optimal sigma for the graph
+# file.write(f"{sigma:.4f}\t{-sigma*eig:.4f}\n")
+# avg_sigma += sigma
+# avg_eig += eig
+
+# avg_sigma /= avgN
+# avg_eig /= avgN
+# file.close()
+# G = nx.barabasi_albert_graph(N, 1, seed=82) # create the graph
+# sparse_G = nx.to_scipy_sparse_array(G)
+# G = f.relabel_nodes(G) # relabel the nodes to be from 0 to N-1 instead of tuples
 
 # data output
-out = f"BA/attack_avg{avgN}_{-avg_sigma*avg_eig:.3f}/" # sigma times the minimum eigenvalue
+out = f"grid/attack_avg{avgN}_{-avg_sigma*avg_eig:.3f}/" # sigma times the minimum eigenvalue
 if not os.path.exists(out):
     os.makedirs(out)
-plotting = [0.0, 0.08, 0.18, 0.28, 0.4] # p of the attack to plot
+plotting = [0.00, 0.18, 0.37] # p of the attack to plot
 
 
 # fig1 = plt.figure(1)
@@ -55,7 +55,7 @@ plotting = [0.0, 0.08, 0.18, 0.28, 0.4] # p of the attack to plot
 # plt.close()
 
 
-
+sigma = -0.999/eig
 # compute the centrality measures and attacks
 psi = f.domirank(G, sigma=sigma) #compute the centrality measures
 between = list(nx.betweenness_centrality(G).values()) #compute the centrality measures
@@ -89,22 +89,26 @@ x = np.linspace(0,1, lcc_domi.shape[0])
 for i in range(1, len(lcc)):
     plt.plot(x, lcc[i], label=titles[i], linewidth=2)
 plt.plot(x, lcc[0], label=titles[0], linewidth=3, linestyle='dotted', color = 'b')
-for p in plotting[1:]:
-    plt.axvline(x=p, color='grey', linestyle='--', zorder=0)
-plt.legend(fontsize=12)
-plt.xlabel("removed fraction, p", fontsize = 12)
-plt.ylabel("Largest Connected Component", fontsize = 12)
+# for p in plotting[1:]:
+#     plt.axvline(x=p, color='grey', linestyle='--', zorder=0)
+plt.legend(fontsize=14)
+plt.xlabel("p", fontsize = 14)
+plt.ylabel("LCC", fontsize = 14)
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
 plt.savefig(out + "lcc.png", dpi=300, bbox_inches='tight')
 plt.close()
 
 for i in range(1, len(lcc)):
     plt.plot(x, links[i], label=titles[i], linewidth=2)
 plt.plot(x, links[0], label=titles[0], linewidth=3, linestyle='dotted', color = 'b')
-for p in plotting[1:]:
-    plt.axvline(x=p, color='grey', linestyle='--', zorder=0)
-plt.legend(fontsize=12)
-plt.xlabel("removed fraction, p", fontsize = 12)
-plt.ylabel("Number of Links", fontsize = 12)
+# for p in plotting[1:]:
+#     plt.axvline(x=p, color='grey', linestyle='--', zorder=0)
+plt.legend(fontsize=14)
+plt.xlabel("p", fontsize = 14)
+plt.ylabel("Number of Links", fontsize = 14)
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
 plt.savefig(out + "links.png", dpi=300, bbox_inches='tight')
 plt.close()
 

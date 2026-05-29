@@ -72,21 +72,23 @@ H = hnx.Hypergraph.from_numpy_array(
     node_names=nombres_nodos, 
     edge_names=nombres_aristas)
 
-# dr = fh.domirank(matriz, alpha, theta, eta, eta2)
-# for seed in range(200):
-#     pos = nx.spring_layout(H.bipartite(), seed=seed)
-#     fh.plotting_psi(H, dr, nombres_nodos, title=f"Seed {seed}", layout='some', pos=pos)
-#     plt.savefig(f'results_hypernet/pruebasseed/net3_alpha{alpha}_theta{theta}_eta1_{eta}_eta2_{eta2}_seed{seed}.png')
-#     plt.close()
-
 
 
 for eta in [-2, 0, 2]:
     for eta2 in [-2, 0, 2]:
         fh.prueba_step(H, matriz, nombres_nodos, alpha, theta, eta, eta2)
-        plt.savefig(f'results_hypernet/pruebas2/net3_alpha{alpha}_theta{theta}_eta1_{eta}_eta2_{eta2}.png')
-        plt.close()
+plt.show()
 
+
+
+
+# dr = fh.domirank(matriz, alpha, theta, eta, eta2)
+
+
+
+# for eta in [-2, 0, 2]:
+#     fh.domirank_save_evolution_theta(matriz, alpha, theta, eta, [-2, 0, 2], file_title=f'results_hypernet/pruebas_/net3_alpha{alpha}_theta{theta}_eta1_{eta}')
+    
 # psi = fh.domirank(matriz, alpha, theta, eta, eta2)
 
 # node_map = {i: nombre for i, nombre in enumerate(nombres_nodos)}
